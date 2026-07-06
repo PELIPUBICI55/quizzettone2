@@ -12,7 +12,7 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static('public'));
+app.use(express.static('dist'));
 
 io.on('connection', (socket) => {
   console.log('Un utente si è connesso:', socket.id);
