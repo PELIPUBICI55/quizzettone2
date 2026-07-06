@@ -1,35 +1,62 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import path from 'path'; // Gestore dei percorsi di Node
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: "*"
-  }
+  cors: { origin: "*" }
 });
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static('dist'));
+// Configura la cartella dei file statici (prova sia 'dist' che 'public')
+app.use(express.static(path.join(__dirname, '../dist')));
+app.use(express.static(path.join(__dirname, 'dist')));
+app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// FORZA IL CARICAMENTO DELLA PAGINA INIZIALE
+app.get('/', (req, res) => {
+  // Prova a servire il file index.html da dist, se fallisce prova da public
+  res.sendFile(path.join(__dirname, '../dist/index.html'), (err) => {
+    if (err) {
+      res.sendFile(path.join(__dirname, 'dist/index.html'), (err2) => {
+        if (err2) {
+          res.sendFile(path.join(__dirname, '../public/index.html'));
+        }
+      });
+    }
+  });
+});
+
+// FORZA IL CARICAMENTO DELLA PAGINA HOST
+app.get('/host.html', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/host.html'), (err) => {
+    if (err) {
+      res.sendFile(path.join(__dirname, 'dist/host.html'), (err2) => {
+        if (err2) {
+          res.sendFile(path.join(__dirname, '../public/host.html'));
+        }
+      });
+    }
+  });
+});
 
 io.on('connection', (socket) => {
   console.log('Un utente si è connesso:', socket.id);
 
   socket.on('joinGame', (username: string) => {
     (socket as any).username = username;
-    console.log(`${username} è entrato in partita`);
     io.emit('playerJoined', username);
   });
 
   socket.on('sendQuestion', (data: any) => {
-    console.log('Nuova domanda inviata dall\'host:', data.question);
     io.emit('nextQuestion', data);
   });
 
   socket.on('submitAnswer', (data: any) => {
-    console.log(`${data.username} ha risposto: ${data.answer}`);
     io.emit('playerAnswered', data);
   });
 
