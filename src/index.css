@@ -1,0 +1,521 @@
+:root {
+  --bg: #0b1020;
+  --bg-card: rgba(18, 26, 48, 0.82);
+  --gold: #f5c842;
+  --gold-dim: #c89b1a;
+  --accent: #5eead4;
+  --text: #f4f7ff;
+  --muted: #9aa8c7;
+  --danger: #ff6b6b;
+  --success: #4ade80;
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  font-family: "Outfit", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(94, 234, 212, 0.08), transparent 35%),
+    radial-gradient(circle at 80% 20%, rgba(245, 200, 66, 0.12), transparent 25%),
+    var(--bg);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.bg-orbs span {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.bg-orbs span:nth-child(1) {
+  width: 320px;
+  height: 320px;
+  background: #f5c842;
+  top: -80px;
+  left: -60px;
+}
+
+.bg-orbs span:nth-child(2) {
+  width: 280px;
+  height: 280px;
+  background: #5eead4;
+  bottom: 10%;
+  right: -80px;
+}
+
+.bg-orbs span:nth-child(3) {
+  width: 200px;
+  height: 200px;
+  background: #818cf8;
+  top: 40%;
+  left: 50%;
+}
+
+.home,
+.lobby,
+.game,
+.results {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.hero,
+.lobby-header,
+.results-hero {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  margin: 0;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+h1,
+h2 {
+  font-family: "Bebas Neue", sans-serif;
+  letter-spacing: 0.04em;
+  margin: 0.2rem 0;
+  line-height: 0.95;
+}
+
+h1 {
+  font-size: clamp(4rem, 16vw, 6.5rem);
+  color: var(--gold);
+  text-shadow: 0 8px 30px rgba(245, 200, 66, 0.25);
+}
+
+h2 {
+  font-size: clamp(2.4rem, 8vw, 3.5rem);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.tagline {
+  margin: 1.25rem auto 0;
+  max-width: 34rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field span,
+.label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 0.95rem 1rem;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus {
+  border-color: rgba(245, 200, 66, 0.55);
+  box-shadow: 0 0 0 3px rgba(245, 200, 66, 0.12);
+}
+
+.btn {
+  border: none;
+  border-radius: 14px;
+  padding: 0.95rem 1.2rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s, background 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  color: #1a1400;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn-large {
+  width: 100%;
+  padding: 1.1rem;
+  font-size: 1.05rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.92rem;
+}
+
+.share-hint {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.join-url {
+  margin: 0 0 1rem;
+  word-break: break-all;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.invite-banner {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.invite-banner p {
+  margin: 0.35rem 0;
+}
+
+.invite-code {
+  color: var(--gold);
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.12em;
+}
+
+.invite-hint {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.home-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.room-code-card {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.room-code {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 4rem;
+  letter-spacing: 0.22em;
+  margin: 0.4rem 0 1rem;
+  color: var(--gold);
+}
+
+.code-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.player-list,
+.reveal-list,
+.scoreboard ul,
+.podium ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.player-list li,
+.reveal-list li,
+.scoreboard li,
+.podium li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.player-list li:last-child,
+.reveal-list li:last-child,
+.scoreboard li:last-child,
+.podium li:last-child {
+  border-bottom: none;
+}
+
+.badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(245, 200, 66, 0.15);
+  color: var(--gold);
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+}
+
+.waiting {
+  text-align: center;
+  color: var(--muted);
+}
+
+.game-top {
+  margin-bottom: 1rem;
+}
+
+.progress-wrap {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+.game-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.category {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.question-card {
+  position: relative;
+  margin-bottom: 1rem;
+  padding-top: 2rem;
+}
+
+.question-card h2 {
+  font-family: "Outfit", sans-serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.timer-ring {
+  position: absolute;
+  top: -18px;
+  right: 1rem;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background:
+    radial-gradient(circle, rgba(11, 16, 32, 0.95) 58%, transparent 59%),
+    conic-gradient(var(--gold) calc(var(--ratio) * 360deg), rgba(255, 255, 255, 0.08) 0);
+}
+
+.timer-ring.urgent {
+  background:
+    radial-gradient(circle, rgba(11, 16, 32, 0.95) 58%, transparent 59%),
+    conic-gradient(var(--danger) calc(var(--ratio) * 360deg), rgba(255, 255, 255, 0.08) 0);
+}
+
+.options {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: center;
+  text-align: left;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.option-label {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(245, 200, 66, 0.12);
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.option.selected {
+  border-color: rgba(245, 200, 66, 0.6);
+  background: rgba(245, 200, 66, 0.08);
+}
+
+.option.correct {
+  border-color: rgba(74, 222, 128, 0.7);
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.option.wrong {
+  border-color: rgba(255, 107, 107, 0.7);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.reveal-card {
+  margin-bottom: 1rem;
+}
+
+.reveal-list .hit span:last-child {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.reveal-list .miss span:last-child {
+  color: var(--muted);
+}
+
+.scoreboard h3,
+.podium h3,
+.reveal-card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.results .winner-line {
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.results .winner-line strong {
+  color: var(--gold);
+}
+
+.podium li.first {
+  background: rgba(245, 200, 66, 0.08);
+  border-radius: 12px;
+  padding-inline: 0.75rem;
+}
+
+.podium .rank {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 1.6rem;
+  color: var(--gold);
+  min-width: 2rem;
+}
+
+.podium .score {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+@media (min-width: 768px) {
+  .game {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 1rem;
+    align-items: start;
+    max-width: 980px;
+  }
+
+  .game-top,
+  .question-card,
+  .options,
+  .reveal-card {
+    grid-column: 1;
+  }
+
+  .scoreboard {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    position: sticky;
+    top: 1rem;
+  }
+}
