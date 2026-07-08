@@ -1,78 +1,104 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import express from "express";
+import http from "http";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Server } from "socket.io";
+import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.js";
+import { PartyManager } from "./game/PartyManager.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: { origin: "*" }
+const httpServer = http.createServer(app);
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+  cors: { origin: "*" },
 });
 
-const PORT = process.env.PORT || 3000;
+const parties = new PartyManager();
+// tiene traccia di dove si trova ogni socket, per instradare gli eventi
+const socketLocation = new Map<string, { code: string; playerId: string }>();
 
-// RICREAZIONE SICURA DI __DIRNAME IN TYPESCRIPT ES MODULES
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+app.get("/health", (_req, res) => res.status(200).send("ok"));
 
-// Configura le cartelle statiche
-app.use(express.static(path.join(__dirname, '../dist')));
-app.use(express.static(path.join(__dirname, 'dist')));
-app.use(express.static(path.join(__dirname, '../public')));
-app.use(express.static(path.join(__dirname, 'public')));
+io.on("connection", (socket) => {
+  socket.on("party:create", ({ name }, cb) => {
+    const session = parties.create();
+    const player = session.addPlayer(socket.id, name);
+    socketLocation.set(socket.id, { code: session.code, playerId: player.id });
+    cb({ ok: true, code: session.code });
+    const snap = session.getSnapshot(player.id);
+    if (snap) socket.emit("state:update", snap);
+  });
 
-// Rotta principale per i giocatori
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'), (err) => {
-    if (err) {
-      res.sendFile(path.join(__dirname, 'dist/index.html'), (err2) => {
-        if (err2) {
-          res.sendFile(path.join(__dirname, '../public/index.html'), (err3) => {
-            if (err3) res.sendFile(path.join(__dirname, 'public/index.html'));
-          });
-        }
-      });
+  socket.on("party:join", ({ code, name }, cb) => {
+    const session = parties.get(code);
+    if (!session) {
+      cb({ ok: false, error: "Codice partita non trovato." });
+      return;
     }
+    const player = session.addPlayer(socket.id, name);
+    socketLocation.set(socket.id, { code: session.code, playerId: player.id });
+    cb({ ok: true, code: session.code });
+    session.broadcastState(io);
+  });
+
+  socket.on("world:enter", ({ worldId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.enterWorld(loc.playerId, worldId, io);
+  });
+
+  socket.on("world:leave", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.enterWorld(loc.playerId, "cittadella", io);
+  });
+
+  socket.on("quiz:answer", ({ questionId, answerIndex }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.submitAnswer(loc.playerId, questionId, answerIndex, io);
+  });
+
+  socket.on("card:use", ({ cardId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.useCard(loc.playerId, cardId, io);
+  });
+
+  socket.on("shop:buyPack", ({ packId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.buyPack(loc.playerId, packId, io);
+  });
+
+  socket.on("disconnect", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    socketLocation.delete(socket.id);
+    const session = parties.get(loc.code);
+    if (!session) return;
+    session.removePlayer(loc.playerId);
+    session.broadcastState(io);
+    parties.removeIfEmpty(loc.code);
   });
 });
 
-// Rotta per l'host
-app.get('/host.html', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/host.html'), (err) => {
-    if (err) {
-      res.sendFile(path.join(__dirname, 'dist/host.html'), (err2) => {
-        if (err2) {
-          res.sendFile(path.join(__dirname, '../public/host.html'), (err3) => {
-            if (err3) res.sendFile(path.join(__dirname, 'public/host.html'));
-          });
-        }
-      });
-    }
-  });
+// In produzione serviamo il client buildato da Vite (vedi vite.config.ts:
+// build.outDir = "dist/client", mentre questo file compila in dist/server).
+const clientDist = path.join(__dirname, "../client");
+app.use(express.static(clientDist));
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/socket.io")) return next();
+  res.sendFile(path.join(clientDist, "index.html"));
 });
 
-io.on('connection', (socket) => {
-  console.log('Un utente si è connesso:', socket.id);
-
-  socket.on('joinGame', (username: string) => {
-    (socket as any).username = username;
-    io.emit('playerJoined', username);
-  });
-
-  socket.on('sendQuestion', (data: any) => {
-    io.emit('nextQuestion', data);
-  });
-
-  socket.on('submitAnswer', (data: any) => {
-    io.emit('playerAnswered', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Utente disconnesso:', socket.id);
-  });
-});
-
+const PORT = Number(process.env.PORT) || 3001;
 httpServer.listen(PORT, () => {
-  console.log(`Server attivo sulla porta ${PORT}`);
+  console.log(`Quizzettone server in ascolto sulla porta ${PORT}`);
 });

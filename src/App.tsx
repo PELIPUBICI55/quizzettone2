@@ -1,159 +1,137 @@
 import { useEffect, useState } from "react";
-import { parseInviteFromLocation } from "../shared/links";
-import { createRoom, joinRoom } from "./socket";
-import { useRoomState } from "./hooks/useRoomState";
-import { Lobby } from "./components/Lobby";
-import { Game } from "./components/Game";
-import { Results } from "./components/Results";
-
-type Screen = "home" | "join";
-
-function clearInviteFromUrl() {
-  window.history.replaceState({}, "", "/");
-}
+import type {
+  GameStateSnapshot,
+  PackOpenedPayload,
+  QuizQuestionPayload,
+  QuizResultPayload,
+  WheelSpinPayload,
+} from "../shared/types";
+import { socket } from "./socket";
+import { JoinScreen } from "./components/JoinScreen";
+import { Wheel } from "./components/Wheel";
+import { QuizMinigame } from "./components/QuizMinigame";
+import { Cittadella } from "./screens/Cittadella";
+import { CardView } from "./components/CardView";
 
 export default function App() {
-  const room = useRoomState();
-  const [screen, setScreen] = useState<Screen>("home");
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [state, setState] = useState<GameStateSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wheelInfo, setWheelInfo] = useState<WheelSpinPayload | null>(null);
+  const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
+  const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
+  const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
 
   useEffect(() => {
-    const invited = parseInviteFromLocation(window.location);
-    if (invited) {
-      setInviteCode(invited);
-      setCode(invited);
-      setScreen("join");
-    }
+    const onState = (s: GameStateSnapshot) => setState(s);
+    const onWheel = (p: WheelSpinPayload) => {
+      setWheelInfo(p);
+      setQuizPayload(null);
+      setQuizResult(null);
+    };
+    const onQuestion = (p: QuizQuestionPayload) => {
+      setWheelInfo(null);
+      setQuizPayload(p);
+      setQuizResult(null);
+    };
+    const onResult = (p: QuizResultPayload) => setQuizResult(p);
+    const onPack = (p: PackOpenedPayload) => setPackOpened(p);
+    const onError = (p: { message: string }) => setError(p.message);
+    const onDisconnect = () => setState(null);
+
+    socket.on("state:update", onState);
+    socket.on("wheel:spin", onWheel);
+    socket.on("quiz:question", onQuestion);
+    socket.on("quiz:result", onResult);
+    socket.on("shop:packOpened", onPack);
+    socket.on("error:message", onError);
+    socket.on("disconnect", onDisconnect);
+
+    return () => {
+      socket.off("state:update", onState);
+      socket.off("wheel:spin", onWheel);
+      socket.off("quiz:question", onQuestion);
+      socket.off("quiz:result", onResult);
+      socket.off("shop:packOpened", onPack);
+      socket.off("error:message", onError);
+      socket.off("disconnect", onDisconnect);
+    };
   }, []);
 
-  const handleCreate = () => {
-    setError("");
-    setLoading(true);
-    createRoom(name, (result) => {
-      setLoading(false);
-      if (!result.ok) setError(result.error);
-      else clearInviteFromUrl();
-    });
-  };
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(t);
+  }, [error]);
 
-  const handleJoin = () => {
-    setError("");
-    setLoading(true);
-    joinRoom(code, name, (result) => {
-      setLoading(false);
-      if (!result.ok) setError(result.error);
-      else clearInviteFromUrl();
-    });
-  };
-
-  if (room) {
-    if (room.phase === "lobby") return <Lobby room={room} />;
-    if (room.phase === "finished") return <Results room={room} />;
-    return <Game room={room} />;
+  if (!state) {
+    return (
+      <div className="app-shell">
+        {error && (
+          <div className="error-banner" style={{ margin: "1rem" }}>
+            {error}
+          </div>
+        )}
+        <JoinScreen onError={setError} />
+      </div>
+    );
   }
 
-  const joiningViaLink = screen === "join" && inviteCode !== null;
+  const backToCittadella = () => {
+    setQuizPayload(null);
+    setQuizResult(null);
+    setWheelInfo(null);
+    socket.emit("world:leave");
+  };
+
+  const currentWorld = state.worlds.find((w) => w.id === wheelInfo?.worldId);
 
   return (
-    <div className="app">
-      <div className="bg-orbs" aria-hidden="true">
-        <span />
-        <span />
-        <span />
+    <div className="app-shell">
+      <div className="topbar">
+        <span className="title display">🎪 Quizzettone</span>
+        <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+          Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
+        </span>
+        <span className="coin-pill">🪙 {state.me.coins}</span>
       </div>
 
-      <main className="home">
-        <header className="hero">
-          <p className="eyebrow">Grandioso Giuoco di</p>
-          <h1>Quizzettone</h1>
-          <p className="subtitle">conoscenze generali</p>
-          <p className="tagline">
-            Crea una stanza, invita gli amici con un link e sfidati a colpi di cultura generale.
-          </p>
-        </header>
+      <div className="main-area">
+        {error && <div className="error-banner">{error}</div>}
 
-        {joiningViaLink && (
-          <section className="invite-banner card">
-            <p className="eyebrow">Invito ricevuto</p>
-            <p>
-              Sei stato invitato alla stanza{" "}
-              <strong className="invite-code">{inviteCode}</strong>
-            </p>
-            <p className="invite-hint">Inserisci il tuo nome e unisciti alla partita.</p>
-          </section>
+        {wheelInfo ? (
+          <Wheel
+            worldName={currentWorld?.name ?? ""}
+            worldEmoji={currentWorld?.emoji ?? "🎡"}
+          />
+        ) : quizPayload ? (
+          <QuizMinigame
+            payload={quizPayload}
+            result={quizResult}
+            myCollection={state.me.collection}
+            cardCatalog={state.cardCatalog}
+            onUseCard={(cardId) => socket.emit("card:use", { cardId })}
+            onBackToCittadella={backToCittadella}
+          />
+        ) : (
+          <Cittadella state={state} />
         )}
+      </div>
 
-        <section className="card panel">
-          <label className="field">
-            <span>Il tuo nome</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Es. Marco"
-              maxLength={20}
-              autoFocus
-            />
-          </label>
-
-          {screen === "home" ? (
-            <>
-              <button
-                className="btn btn-primary"
-                disabled={!name.trim() || loading}
-                onClick={handleCreate}
-              >
-                {loading ? "Creazione..." : "Crea partita"}
-              </button>
-              <button className="btn btn-ghost" onClick={() => setScreen("join")}>
-                Unisciti con codice
-              </button>
-            </>
-          ) : (
-            <>
-              {!joiningViaLink && (
-                <label className="field">
-                  <span>Codice stanza</span>
-                  <input
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="Es. AB3K9"
-                    maxLength={5}
-                  />
-                </label>
-              )}
-              <button
-                className="btn btn-primary"
-                disabled={!name.trim() || code.trim().length < 4 || loading}
-                onClick={handleJoin}
-              >
-                {loading ? "Entrando..." : "Entra in partita"}
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  setScreen("home");
-                  setInviteCode(null);
-                  clearInviteFromUrl();
-                }}
-              >
-                Indietro
-              </button>
-            </>
-          )}
-
-          {error && <p className="error">{error}</p>}
-        </section>
-
-        <footer className="home-footer">
-          <div className="pill">10 domande</div>
-          <div className="pill">Multigiocatore online</div>
-          <div className="pill">Punti per velocità</div>
-        </footer>
-      </main>
+      {packOpened && (
+        <div className="reveal-overlay" onClick={() => setPackOpened(null)}>
+          <h2 className="display" style={{ fontSize: "2rem" }}>
+            Hai aperto un pacchetto!
+          </h2>
+          <div className="card-grid" style={{ maxWidth: 560 }}>
+            {packOpened.cards.map((c, i) => (
+              <CardView key={i} card={c} />
+            ))}
+          </div>
+          <button className="btn" onClick={() => setPackOpened(null)}>
+            Continua
+          </button>
+        </div>
+      )}
     </div>
   );
 }
