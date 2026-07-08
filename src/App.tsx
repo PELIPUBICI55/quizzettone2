@@ -12,6 +12,7 @@ import { Wheel } from "./components/Wheel";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { Cittadella } from "./screens/Cittadella";
 import { Board } from "./components/Board";
+import { DiceOverlay } from "./components/DiceOverlay";
 import { CardView } from "./components/CardView";
 
 export default function App() {
@@ -89,6 +90,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <DiceOverlay state={state} />
       <div className="topbar">
         <span className="title display">🎪 Quizzettone</span>
         <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>

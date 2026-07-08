@@ -39,13 +39,16 @@ function CloudShape({
   cy,
   r,
   fill,
+  floatDelay,
 }: {
   cx: number;
   cy: number;
   r: number;
   fill: string;
+  floatDelay: number;
 }) {
-  // un gruppo di cerchi sovrapposti per dare l'idea di una nuvola
+  // un gruppo di cerchi sovrapposti per dare l'idea di una nuvola,
+  // con ombra, striatura fucsia/viola e riflesso glossy per un look 3D
   const bumps = [
     { dx: -r * 0.55, dy: r * 0.15, br: r * 0.62 },
     { dx: r * 0.55, dy: r * 0.15, br: r * 0.62 },
@@ -54,11 +57,22 @@ function CloudShape({
     { dx: r * 0.2, dy: r * 0.35, br: r * 0.55 },
   ];
   return (
-    <g>
-      {bumps.map((b, i) => (
-        <circle key={i} cx={cx + b.dx} cy={cy + b.dy} r={b.br} fill={fill} />
-      ))}
-      <circle cx={cx} cy={cy} r={r * 0.75} fill={fill} />
+    <g transform={`translate(${cx} ${cy})`}>
+      <g className="cloud-float" style={{ animationDelay: `${floatDelay}s` }}>
+        <g filter="url(#cloudShadow)">
+          {bumps.map((b, i) => (
+            <circle key={i} cx={b.dx} cy={b.dy} r={b.br} fill={fill} />
+          ))}
+          <circle cx={0} cy={0} r={r * 0.75} fill={fill} />
+        </g>
+        {/* striatura fucsia/viola */}
+        {bumps.map((b, i) => (
+          <circle key={`s${i}`} cx={b.dx} cy={b.dy} r={b.br} fill="url(#cloudStreak)" />
+        ))}
+        <circle cx={0} cy={0} r={r * 0.75} fill="url(#cloudStreak)" />
+        {/* riflesso glossy per il look 3D */}
+        <circle cx={-r * 0.15} cy={-r * 0.3} r={r * 0.7} fill="url(#cloudHighlight)" />
+      </g>
     </g>
   );
 }
@@ -69,18 +83,10 @@ interface Props {
 
 export function Board({ state }: Props) {
   const [chosenDirection, setChosenDirection] = useState<string | null>(null);
-  const [lastRoll, setLastRoll] = useState<{ playerId: string; value: number } | null>(null);
 
   useEffect(() => {
-    const onRoll = (p: { playerId: string; value: number }) => {
-      setLastRoll(p);
-      setChosenDirection(null);
-    };
-    socket.on("board:diceRolled", onRoll);
-    return () => {
-      socket.off("board:diceRolled", onRoll);
-    };
-  }, []);
+    setChosenDirection(null);
+  }, [state.currentTurnPlayerId]);
 
   const myTurn = state.currentTurnPlayerId === state.me.id;
   const myPos: BoardPosition = state.positions[state.me.id];
@@ -145,29 +151,76 @@ export function Board({ state }: Props) {
       )}
 
       <svg viewBox="0 0 800 800" style={{ width: "100%", maxWidth: 720, display: "block", margin: "0 auto" }}>
+        <defs>
+          <radialGradient id="cloudHighlight" cx="35%" cy="25%" r="65%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="cloudStreak" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e879f9" stopOpacity="0.55" />
+            <stop offset="50%" stopColor="#a855f7" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#e879f9" stopOpacity="0" />
+          </linearGradient>
+          <filter id="cloudShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="7" stdDeviation="7" floodColor="#000" floodOpacity="0.45" />
+          </filter>
+          <linearGradient id="tileBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4a3320" />
+            <stop offset="50%" stopColor="#c99a55" />
+            <stop offset="100%" stopColor="#3a2412" />
+          </linearGradient>
+        </defs>
+
         {/* ponti */}
         {state.board.edges.map((edge) => {
           const a = nodePos(edge.a, state.worlds);
           const b = nodePos(edge.b, state.worlds);
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          const px = -dy / len;
+          const py = dx / len;
+          const shadowOffset = 6;
           const tiles = Array.from({ length: edge.length }, (_, k) => {
             const t = (k + 1) / (edge.length + 1);
             return lerp(a, b, t);
           });
           return (
             <g key={edge.id}>
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#5a3d1f" strokeWidth={10} strokeLinecap="round" opacity={0.55} />
+              {/* sottostruttura d'ombra per dare spessore al ponte */}
+              <line
+                x1={a.x + px * shadowOffset}
+                y1={a.y + py * shadowOffset}
+                x2={b.x + px * shadowOffset}
+                y2={b.y + py * shadowOffset}
+                stroke="#000000"
+                strokeWidth={12}
+                strokeLinecap="round"
+                opacity={0.35}
+              />
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="url(#tileBevel)" strokeWidth={11} strokeLinecap="round" opacity={0.85} />
               {tiles.map((t, i) => (
-                <rect
-                  key={i}
-                  x={t.x - 12}
-                  y={t.y - 12}
-                  width={24}
-                  height={24}
-                  rx={5}
-                  fill="var(--panel-raised)"
-                  stroke="var(--gold)"
-                  strokeWidth={1.5}
-                />
+                <g key={i}>
+                  <rect
+                    x={t.x - 12 + px * 2}
+                    y={t.y - 12 + py * 2}
+                    width={24}
+                    height={24}
+                    rx={5}
+                    fill="#000000"
+                    opacity={0.3}
+                  />
+                  <rect
+                    x={t.x - 12}
+                    y={t.y - 12}
+                    width={24}
+                    height={24}
+                    rx={5}
+                    fill="url(#tileBevel)"
+                    stroke="var(--gold-soft)"
+                    strokeWidth={1.5}
+                  />
+                </g>
               ))}
             </g>
           );
@@ -175,7 +228,7 @@ export function Board({ state }: Props) {
 
         {/* nodi: cittadella + mondi */}
         <g>
-          <CloudShape cx={CENTER.x} cy={CENTER.y} r={CITTADELLA_R} fill="#8a6a1f" />
+          <CloudShape cx={CENTER.x} cy={CENTER.y} r={CITTADELLA_R} fill="#8a6a1f" floatDelay={0} />
           <text x={CENTER.x} y={CENTER.y - 6} textAnchor="middle" fontSize={26}>
             🏰
           </text>
@@ -191,11 +244,11 @@ export function Board({ state }: Props) {
           </text>
         </g>
 
-        {state.worlds.map((w) => {
+        {state.worlds.map((w, i) => {
           const pos = nodePos(w.id, state.worlds);
           return (
             <g key={w.id}>
-              <CloudShape cx={pos.x} cy={pos.y} r={WORLD_R} fill={w.colorFrom} />
+              <CloudShape cx={pos.x} cy={pos.y} r={WORLD_R} fill={w.colorFrom} floatDelay={i * 0.4} />
               <text x={pos.x} y={pos.y - 4} textAnchor="middle" fontSize={22}>
                 {w.emoji}
               </text>
@@ -255,13 +308,6 @@ export function Board({ state }: Props) {
           })
         )}
       </svg>
-
-      {lastRoll && (
-        <p style={{ textAlign: "center", color: "var(--text-muted)" }}>
-          {state.players.find((p) => p.id === lastRoll.playerId)?.name ?? "Qualcuno"} ha tirato un{" "}
-          <strong style={{ color: "var(--gold-soft)" }}>{lastRoll.value}</strong>
-        </p>
-      )}
     </div>
   );
 }
