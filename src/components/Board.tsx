@@ -82,22 +82,25 @@ interface Props {
 }
 
 export function Board({ state }: Props) {
-  const [chosenDirection, setChosenDirection] = useState<string | null>(null);
+  const [revealedRoll, setRevealedRoll] = useState(false);
 
   useEffect(() => {
-    setChosenDirection(null);
+    setRevealedRoll(false);
   }, [state.currentTurnPlayerId]);
+
+  useEffect(() => {
+    if (state.me.pendingRoll !== null) setRevealedRoll(false);
+  }, [state.me.pendingRoll]);
 
   const myTurn = state.currentTurnPlayerId === state.me.id;
   const myPos: BoardPosition = state.positions[state.me.id];
   const currentTurnPlayer = state.players.find((p) => p.id === state.currentTurnPlayerId);
 
   const neighbors = myPos?.onNode ? neighborsOf(myPos.nodeId) : [];
-  const needsDirection = myTurn && myPos?.onNode && neighbors.length > 1;
+  const needsDirection = myPos?.onNode && neighbors.length > 1;
 
-  const roll = () => {
-    socket.emit("board:roll", { direction: chosenDirection ?? undefined });
-  };
+  const rollDice = () => socket.emit("board:roll");
+  const confirmMove = (direction?: string) => socket.emit("board:confirmMove", { direction });
 
   const worldLabel = (nodeId: string) => {
     if (nodeId === "cittadella") return "🏰 Cittadella";
@@ -126,25 +129,33 @@ export function Board({ state }: Props) {
 
       {myTurn && (
         <div className="panel" style={{ marginBottom: "1rem", textAlign: "center" }}>
-          {needsDirection && !chosenDirection ? (
+          {state.me.pendingRoll === null ? (
+            <button className="btn" onClick={rollDice}>
+              🎲 Tira il dado
+            </button>
+          ) : !revealedRoll ? (
             <>
-              <p style={{ marginTop: 0 }}>Scegli la direzione dalla tua posizione:</p>
+              <p style={{ marginTop: 0 }}>
+                Hai tirato <strong style={{ color: "var(--gold-soft)" }}>{state.me.pendingRoll}</strong>!
+              </p>
+              <button className="btn" onClick={() => setRevealedRoll(true)}>
+                Continua
+              </button>
+            </>
+          ) : needsDirection ? (
+            <>
+              <p style={{ marginTop: 0 }}>Scegli in quale direzione avanzare di {state.me.pendingRoll} caselle:</p>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
                 {neighbors.map((n) => (
-                  <button
-                    key={n.neighborId}
-                    className="btn-outline"
-                    onClick={() => setChosenDirection(n.neighborId)}
-                  >
+                  <button key={n.neighborId} className="btn-outline" onClick={() => confirmMove(n.neighborId)}>
                     {worldLabel(n.neighborId)}
                   </button>
                 ))}
               </div>
             </>
           ) : (
-            <button className="btn" onClick={roll}>
-              🎲 Tira il dado
-              {chosenDirection ? ` verso ${worldLabel(chosenDirection)}` : ""}
+            <button className="btn" onClick={() => confirmMove()}>
+              Avanza di {state.me.pendingRoll} caselle
             </button>
           )}
         </div>
@@ -165,24 +176,24 @@ export function Board({ state }: Props) {
             <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#000" floodOpacity="0.55" />
           </filter>
           <filter id="bridgeGlow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feGaussianBlur stdDeviation="4" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-          <linearGradient id="tileBevel" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f0abfc" />
-            <stop offset="50%" stopColor="#a855f7" />
-            <stop offset="100%" stopColor="#5b21b6" />
+          <linearGradient id="deckGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#e9b8ff" />
+            <stop offset="45%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#4c1d95" />
           </linearGradient>
-          <linearGradient id="bridgeBase" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e879f9" />
-            <stop offset="100%" stopColor="#6d28d9" />
+          <linearGradient id="railGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#fce7ff" />
+            <stop offset="100%" stopColor="#c026d3" />
           </linearGradient>
         </defs>
 
-        {/* ponti energetici */}
+        {/* ponti: veri impalcati con corrimano, paletti e caselle-gradino */}
         {state.board.edges.map((edge) => {
           const a = nodePos(edge.a, state.worlds);
           const b = nodePos(edge.b, state.worlds);
@@ -191,56 +202,98 @@ export function Board({ state }: Props) {
           const len = Math.sqrt(dx * dx + dy * dy) || 1;
           const px = -dy / len;
           const py = dx / len;
-          const shadowOffset = 7;
-          const tiles = Array.from({ length: edge.length }, (_, k) => {
-            const t = (k + 1) / (edge.length + 1);
-            return lerp(a, b, t);
-          });
+
+          const DECK_HW = 20; // met\u00e0 larghezza dell'impalcato
+          const RAIL_OFF = 27; // distanza del corrimano dal centro
+
+          const deckA1 = { x: a.x + px * DECK_HW, y: a.y + py * DECK_HW };
+          const deckA2 = { x: a.x - px * DECK_HW, y: a.y - py * DECK_HW };
+          const deckB1 = { x: b.x + px * DECK_HW, y: b.y + py * DECK_HW };
+          const deckB2 = { x: b.x - px * DECK_HW, y: b.y - py * DECK_HW };
+
+          const railA1 = { x: a.x + px * RAIL_OFF, y: a.y + py * RAIL_OFF };
+          const railB1 = { x: b.x + px * RAIL_OFF, y: b.y + py * RAIL_OFF };
+          const railA2 = { x: a.x - px * RAIL_OFF, y: a.y - py * RAIL_OFF };
+          const railB2 = { x: b.x - px * RAIL_OFF, y: b.y - py * RAIL_OFF };
+
+          // punti dei paletti e delle giunture tra caselle (agli estremi + a ogni casella)
+          const posts = Array.from({ length: edge.length + 1 }, (_, k) => k / edge.length);
+
           return (
             <g key={edge.id}>
-              {/* sottostruttura d'ombra per dare spessore al ponte */}
-              <line
-                x1={a.x + px * shadowOffset}
-                y1={a.y + py * shadowOffset}
-                x2={b.x + px * shadowOffset}
-                y2={b.y + py * shadowOffset}
-                stroke="#000000"
-                strokeWidth={14}
-                strokeLinecap="round"
-                opacity={0.5}
+              {/* ombra sotto l'impalcato per dare l'idea di elevazione */}
+              <polygon
+                points={`${deckA1.x + 5},${deckA1.y + 8} ${deckB1.x + 5},${deckB1.y + 8} ${deckB2.x + 5},${deckB2.y + 8} ${deckA2.x + 5},${deckA2.y + 8}`}
+                fill="#000000"
+                opacity={0.4}
               />
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke="url(#bridgeBase)"
-                strokeWidth={13}
-                strokeLinecap="round"
-                opacity={0.95}
-                filter="url(#bridgeGlow)"
+
+              {/* superficie dell'impalcato */}
+              <polygon
+                points={`${deckA1.x},${deckA1.y} ${deckB1.x},${deckB1.y} ${deckB2.x},${deckB2.y} ${deckA2.x},${deckA2.y}`}
+                fill="url(#deckGradient)"
+                stroke="#2a1245"
+                strokeWidth={1.5}
               />
-              {tiles.map((t, i) => (
-                <g key={i}>
-                  <rect
-                    x={t.x - 13 + px * 3}
-                    y={t.y - 13 + py * 3}
-                    width={26}
-                    height={26}
-                    rx={6}
-                    fill="#000000"
-                    opacity={0.35}
+
+              {/* giunture tra le caselle, per farle leggere come gradini distinti */}
+              {posts.slice(1, -1).map((t, i) => {
+                const c = lerp(a, b, t);
+                const p1 = { x: c.x + px * DECK_HW, y: c.y + py * DECK_HW };
+                const p2 = { x: c.x - px * DECK_HW, y: c.y - py * DECK_HW };
+                return (
+                  <line
+                    key={i}
+                    x1={p1.x}
+                    y1={p1.y}
+                    x2={p2.x}
+                    y2={p2.y}
+                    stroke="#2a1245"
+                    strokeWidth={2}
+                    opacity={0.65}
                   />
-                  <rect
-                    x={t.x - 13}
-                    y={t.y - 13}
-                    width={26}
-                    height={26}
-                    rx={6}
-                    fill="url(#tileBevel)"
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                    strokeOpacity={0.7}
+                );
+              })}
+
+              {/* riflesso di luce al centro di ogni casella */}
+              {Array.from({ length: edge.length }, (_, k) => (k + 0.5) / edge.length).map((t, i) => {
+                const c = lerp(a, b, t);
+                return <circle key={i} cx={c.x} cy={c.y} r={6} fill="#fff" opacity={0.18} />;
+              })}
+
+              {/* corrimano su entrambi i lati, con paletti */}
+              {[
+                { rail1: railA1, rail2: railB1 },
+                { rail1: railA2, rail2: railB2 },
+              ].map((side, si) => (
+                <g key={si}>
+                  {posts.map((t, pi) => {
+                    const centerPt = lerp(a, b, t);
+                    const sign = si === 0 ? 1 : -1;
+                    const deckEdge = { x: centerPt.x + px * DECK_HW * sign, y: centerPt.y + py * DECK_HW * sign };
+                    const railEdge = { x: centerPt.x + px * RAIL_OFF * sign, y: centerPt.y + py * RAIL_OFF * sign };
+                    return (
+                      <line
+                        key={pi}
+                        x1={deckEdge.x}
+                        y1={deckEdge.y}
+                        x2={railEdge.x}
+                        y2={railEdge.y}
+                        stroke="#5b21b6"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+                  <line
+                    x1={side.rail1.x}
+                    y1={side.rail1.y}
+                    x2={side.rail2.x}
+                    y2={side.rail2.y}
+                    stroke="url(#railGradient)"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    filter="url(#bridgeGlow)"
                   />
                 </g>
               ))}

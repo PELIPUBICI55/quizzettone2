@@ -78,6 +78,7 @@ export interface PlayerSummary {
 export interface MyState extends PlayerSummary {
   collection: OwnedCard[]; // ogni copia posseduta, con il suo stato used/non used
   activeEffects: CardEffectType[]; // effetti attivati e in attesa di essere consumati
+  pendingRoll: number | null; // numero uscito, in attesa che tu confermi lo spostamento
 }
 
 export interface GameStateSnapshot {
@@ -141,7 +142,8 @@ export interface ClientToServerEvents {
     payload: { code: string; name: string },
     cb: (res: JoinResult) => void
   ) => void;
-  "board:roll": (payload: { direction?: string }) => void;
+  "board:roll": () => void;
+  "board:confirmMove": (payload: { direction?: string }) => void;
   "quiz:answer": (payload: {
     questionId: string;
     answerIndex: number | null;

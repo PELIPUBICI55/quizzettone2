@@ -44,6 +44,58 @@ body {
   background: radial-gradient(ellipse at center, #170a2e 0%, #0a0616 70%);
 }
 
+.galaxy-bg .spiral {
+  position: absolute;
+  width: 150vw;
+  height: 150vw;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(168, 85, 247, 0.4) 30deg,
+    transparent 70deg,
+    transparent 120deg,
+    rgba(232, 121, 249, 0.35) 160deg,
+    transparent 200deg,
+    transparent 250deg,
+    rgba(139, 63, 255, 0.4) 290deg,
+    transparent 330deg,
+    transparent 360deg
+  );
+  filter: blur(35px);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  animation: spiral-rotate 30s linear infinite;
+}
+
+@keyframes spiral-rotate {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.galaxy-bg .core {
+  position: absolute;
+  width: 24vw;
+  height: 24vw;
+  min-width: 220px;
+  min-height: 220px;
+  left: 62%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff8e6 0%, #ffd6f7 22%, #d63fe0 48%, #7a2fd6 70%, transparent 78%);
+  filter: blur(14px);
+  mix-blend-mode: screen;
+  animation: core-pulse 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes core-pulse {
+  from { opacity: 0.75; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
 .galaxy-bg .nebula {
   position: absolute;
   border-radius: 50%;
@@ -624,14 +676,60 @@ input {
   background: rgba(6, 3, 12, 0.72);
   pointer-events: none;
   opacity: 0;
-  animation: dice-overlay-fade 1.8s ease forwards;
+  animation: dice-overlay-fade 2.4s ease forwards;
 }
 
 @keyframes dice-overlay-fade {
   0% { opacity: 0; }
-  12% { opacity: 1; }
-  78% { opacity: 1; }
+  8% { opacity: 1; }
+  85% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+.dice-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dice-drop {
+  animation: dice-drop 1.3s cubic-bezier(0.32, 0.9, 0.32, 1) forwards;
+}
+
+@keyframes dice-drop {
+  0%   { transform: translateY(-260px) scale(1); }
+  44%  { transform: translateY(0) scale(1); }
+  46%  { transform: translateY(0) scaleX(1.18) scaleY(0.78); }
+  50%  { transform: translateY(-14px) scale(1); }
+  60%  { transform: translateY(-65px) scale(1); }
+  70%  { transform: translateY(0) scale(1); }
+  72%  { transform: translateY(0) scaleX(1.1) scaleY(0.86); }
+  76%  { transform: translateY(-6px) scale(1); }
+  85%  { transform: translateY(-22px) scale(1); }
+  93%  { transform: translateY(0) scale(1); }
+  95%  { transform: translateY(0) scaleX(1.05) scaleY(0.92); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.dice-shadow {
+  width: 74px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.6), transparent 70%);
+  margin-top: -8px;
+  animation: dice-shadow-pulse 1.3s ease forwards;
+}
+
+@keyframes dice-shadow-pulse {
+  0%   { opacity: 0.05; transform: scale(0.35); }
+  44%  { opacity: 0.6; transform: scale(1); }
+  50%  { opacity: 0.3; transform: scale(0.7); }
+  60%  { opacity: 0.15; transform: scale(0.55); }
+  70%  { opacity: 0.55; transform: scale(0.95); }
+  85%  { opacity: 0.35; transform: scale(0.75); }
+  93%  { opacity: 0.5; transform: scale(0.9); }
+  100% { opacity: 0.6; transform: scale(1); }
 }
 
 .dice-scene {

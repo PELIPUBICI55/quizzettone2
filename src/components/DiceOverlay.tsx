@@ -50,24 +50,33 @@ export function DiceOverlay({ state }: Props) {
       const n = rollCount.current;
       const face = FACE_ROTATION[p.value] ?? { x: 0, y: 0 };
 
-      setRotation((prev) => {
-        const spinsX = 2 + (n % 3);
-        const spinsY = 3 + ((n * 2) % 3);
-        let targetX = prev.x + spinsX * 360;
-        targetX += ((face.x - targetX) % 360 + 360) % 360;
-        let targetY = prev.y + spinsY * 360;
-        targetY += ((face.y - targetY) % 360 + 360) % 360;
-        return { x: targetX, y: targetY };
-      });
+      const spinsX = 3 + (n % 3);
+      const spinsY = 4 + ((n * 2) % 3);
+      const finalRotation = {
+        x: face.x + spinsX * 360 * (n % 2 === 0 ? 1 : -1),
+        y: face.y + spinsY * 360 * (n % 3 === 0 ? 1 : -1),
+      };
 
+      // Riparte da zero: questo \u00e8 il primo paint del cubo appena rimontato,
+      // quindi non c'\u00e8 ancora nessuna transizione da vedere qui.
+      setRotation({ x: 0, y: 0 });
       setValue(p.value);
       setRollerName(
         state?.players.find((pl) => pl.id === p.playerId)?.name ?? "Qualcuno"
       );
       setVisible(true);
 
+      // Aspetta che il browser abbia dipinto lo stato iniziale, poi passa
+      // alla rotazione finale: solo un cambiamento DOPO il mount fa scattare
+      // davvero la transizione CSS definita su .dice-cube.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setRotation(finalRotation);
+        });
+      });
+
       if (hideTimer.current) clearTimeout(hideTimer.current);
-      hideTimer.current = setTimeout(() => setVisible(false), 1800);
+      hideTimer.current = setTimeout(() => setVisible(false), 2400);
     };
 
     socket.on("board:diceRolled", onRoll);
@@ -82,18 +91,23 @@ export function DiceOverlay({ state }: Props) {
 
   return (
     <div className="dice-overlay" key={rollCount.current}>
-      <div className="dice-scene">
-        <div
-          className="dice-cube"
-          style={{ transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)` }}
-        >
-          <Face number={1} className="dice-face--front" />
-          <Face number={6} className="dice-face--back" />
-          <Face number={2} className="dice-face--right" />
-          <Face number={5} className="dice-face--left" />
-          <Face number={3} className="dice-face--top" />
-          <Face number={4} className="dice-face--bottom" />
+      <div className="dice-stage">
+        <div className="dice-drop">
+          <div className="dice-scene">
+            <div
+              className="dice-cube"
+              style={{ transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)` }}
+            >
+              <Face number={1} className="dice-face--front" />
+              <Face number={6} className="dice-face--back" />
+              <Face number={2} className="dice-face--right" />
+              <Face number={5} className="dice-face--left" />
+              <Face number={3} className="dice-face--top" />
+              <Face number={4} className="dice-face--bottom" />
+            </div>
+          </div>
         </div>
+        <div className="dice-shadow" />
       </div>
       <p className="dice-result-label">
         {rollerName} ha tirato un {value}!

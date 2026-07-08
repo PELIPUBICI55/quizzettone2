@@ -22,6 +22,7 @@ interface InternalPlayer {
   isHost: boolean;
   coins: number;
   boardPosition: BoardPosition;
+  pendingRoll: number | null;
   collection: OwnedCard[];
   activeEffects: CardEffectType[];
   pendingQuestion: QuizQuestionInternal | null;
@@ -66,6 +67,7 @@ export class GameSession {
       isHost,
       coins: 50, // gruzzoletto iniziale
       boardPosition: { nodeId: CITTADELLA_ID, onNode: true },
+      pendingRoll: null,
       collection: [],
       activeEffects: [],
       pendingQuestion: null,
@@ -142,6 +144,7 @@ export class GameSession {
         cardCount: me.collection.length,
         collection: me.collection,
         activeEffects: me.activeEffects,
+        pendingRoll: me.pendingRoll,
       },
     };
   }
@@ -153,7 +156,7 @@ export class GameSession {
     }
   }
 
-  rollDice(playerId: string, direction: string | undefined, io: IOServer) {
+  rollDice(playerId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
 
@@ -169,9 +172,38 @@ export class GameSession {
       });
       return;
     }
+    if (player.pendingRoll !== null) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Conferma prima lo spostamento del tiro precedente.",
+      });
+      return;
+    }
 
     const roll = 1 + Math.floor(Math.random() * 6);
+    player.pendingRoll = roll;
     io.emit("board:diceRolled", { playerId, value: roll });
+    this.broadcastState(io);
+  }
+
+  confirmMove(playerId: string, direction: string | undefined, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Non è il tuo turno.",
+      });
+      return;
+    }
+    if (player.pendingRoll === null) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Devi prima tirare il dado.",
+      });
+      return;
+    }
+
+    const roll = player.pendingRoll;
+    player.pendingRoll = null;
     this.movePlayer(player, roll, direction, io);
   }
 

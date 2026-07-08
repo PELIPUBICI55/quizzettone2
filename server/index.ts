@@ -42,11 +42,18 @@ io.on("connection", (socket) => {
     session.broadcastState(io);
   });
 
-  socket.on("board:roll", ({ direction }) => {
+  socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;
     const session = parties.get(loc.code);
-    session?.rollDice(loc.playerId, direction, io);
+    session?.rollDice(loc.playerId, io);
+  });
+
+  socket.on("board:confirmMove", ({ direction }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.confirmMove(loc.playerId, direction, io);
   });
 
   socket.on("quiz:answer", ({ questionId, answerIndex }) => {
