@@ -153,25 +153,36 @@ export function Board({ state }: Props) {
       <svg viewBox="0 0 800 800" style={{ width: "100%", maxWidth: 720, display: "block", margin: "0 auto" }}>
         <defs>
           <radialGradient id="cloudHighlight" cx="35%" cy="25%" r="65%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.75" />
             <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </radialGradient>
           <linearGradient id="cloudStreak" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e879f9" stopOpacity="0.55" />
-            <stop offset="50%" stopColor="#a855f7" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#e879f9" stopOpacity="0" />
+            <stop offset="0%" stopColor="#f472f4" stopOpacity="0.8" />
+            <stop offset="50%" stopColor="#a855f7" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#f472f4" stopOpacity="0" />
           </linearGradient>
-          <filter id="cloudShadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="7" stdDeviation="7" floodColor="#000" floodOpacity="0.45" />
+          <filter id="cloudShadow" x="-60%" y="-60%" width="220%" height="220%">
+            <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#000" floodOpacity="0.55" />
+          </filter>
+          <filter id="bridgeGlow" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
           </filter>
           <linearGradient id="tileBevel" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#4a3320" />
-            <stop offset="50%" stopColor="#c99a55" />
-            <stop offset="100%" stopColor="#3a2412" />
+            <stop offset="0%" stopColor="#f0abfc" />
+            <stop offset="50%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#5b21b6" />
+          </linearGradient>
+          <linearGradient id="bridgeBase" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e879f9" />
+            <stop offset="100%" stopColor="#6d28d9" />
           </linearGradient>
         </defs>
 
-        {/* ponti */}
+        {/* ponti energetici */}
         {state.board.edges.map((edge) => {
           const a = nodePos(edge.a, state.worlds);
           const b = nodePos(edge.b, state.worlds);
@@ -180,7 +191,7 @@ export function Board({ state }: Props) {
           const len = Math.sqrt(dx * dx + dy * dy) || 1;
           const px = -dy / len;
           const py = dx / len;
-          const shadowOffset = 6;
+          const shadowOffset = 7;
           const tiles = Array.from({ length: edge.length }, (_, k) => {
             const t = (k + 1) / (edge.length + 1);
             return lerp(a, b, t);
@@ -194,31 +205,42 @@ export function Board({ state }: Props) {
                 x2={b.x + px * shadowOffset}
                 y2={b.y + py * shadowOffset}
                 stroke="#000000"
-                strokeWidth={12}
+                strokeWidth={14}
                 strokeLinecap="round"
-                opacity={0.35}
+                opacity={0.5}
               />
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="url(#tileBevel)" strokeWidth={11} strokeLinecap="round" opacity={0.85} />
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke="url(#bridgeBase)"
+                strokeWidth={13}
+                strokeLinecap="round"
+                opacity={0.95}
+                filter="url(#bridgeGlow)"
+              />
               {tiles.map((t, i) => (
                 <g key={i}>
                   <rect
-                    x={t.x - 12 + px * 2}
-                    y={t.y - 12 + py * 2}
-                    width={24}
-                    height={24}
-                    rx={5}
+                    x={t.x - 13 + px * 3}
+                    y={t.y - 13 + py * 3}
+                    width={26}
+                    height={26}
+                    rx={6}
                     fill="#000000"
-                    opacity={0.3}
+                    opacity={0.35}
                   />
                   <rect
-                    x={t.x - 12}
-                    y={t.y - 12}
-                    width={24}
-                    height={24}
-                    rx={5}
+                    x={t.x - 13}
+                    y={t.y - 13}
+                    width={26}
+                    height={26}
+                    rx={6}
                     fill="url(#tileBevel)"
-                    stroke="var(--gold-soft)"
+                    stroke="#ffffff"
                     strokeWidth={1.5}
+                    strokeOpacity={0.7}
                   />
                 </g>
               ))}
