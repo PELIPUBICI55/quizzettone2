@@ -77,6 +77,13 @@ io.on("connection", (socket) => {
     session?.buyPack(loc.playerId, packId, io);
   });
 
+  socket.on("shop:leave", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.leaveShop(loc.playerId, io);
+  });
+
   socket.on("disconnect", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

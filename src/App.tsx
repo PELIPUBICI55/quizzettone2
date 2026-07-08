@@ -13,11 +13,11 @@ import { QuizMinigame } from "./components/QuizMinigame";
 import { Cittadella } from "./screens/Cittadella";
 import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
+import { CollectionMenu } from "./components/CollectionMenu";
 import { CardView } from "./components/CardView";
 
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
-  const [tab, setTab] = useState<"board" | "cittadella">("board");
   const [error, setError] = useState<string | null>(null);
   const [wheelInfo, setWheelInfo] = useState<WheelSpinPayload | null>(null);
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
@@ -83,7 +83,6 @@ export default function App() {
     setQuizPayload(null);
     setQuizResult(null);
     setWheelInfo(null);
-    setTab("board");
   };
 
   const currentWorld = state.worlds.find((w) => w.id === wheelInfo?.worldId);
@@ -97,6 +96,7 @@ export default function App() {
           Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
         </span>
         <span className="coin-pill">🪙 {state.me.coins}</span>
+        <CollectionMenu state={state} />
       </div>
 
       <div className="main-area">
@@ -117,17 +117,7 @@ export default function App() {
             onClose={closeQuiz}
           />
         ) : (
-          <>
-            <div className="join-tabs" style={{ marginBottom: "1.5rem" }}>
-              <button className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}>
-                🗺️ Mappa
-              </button>
-              <button className={tab === "cittadella" ? "active" : ""} onClick={() => setTab("cittadella")}>
-                🏰 Cittadella
-              </button>
-            </div>
-            {tab === "board" ? <Board state={state} /> : <Cittadella state={state} />}
-          </>
+          state.me.pendingShop ? <Cittadella state={state} /> : <Board state={state} />
         )}
       </div>
 

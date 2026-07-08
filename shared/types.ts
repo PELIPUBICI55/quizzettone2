@@ -79,6 +79,7 @@ export interface MyState extends PlayerSummary {
   collection: OwnedCard[]; // ogni copia posseduta, con il suo stato used/non used
   activeEffects: CardEffectType[]; // effetti attivati e in attesa di essere consumati
   pendingRoll: number | null; // numero uscito, in attesa che tu confermi lo spostamento
+  pendingShop: boolean; // sei atterrato sulla Cittadella e stai visitando il mercante
 }
 
 export interface GameStateSnapshot {
@@ -150,6 +151,7 @@ export interface ClientToServerEvents {
   }) => void;
   "card:use": (payload: { cardId: string }) => void;
   "shop:buyPack": (payload: { packId: string }) => void;
+  "shop:leave": () => void;
 }
 
 // Eventi server -> client

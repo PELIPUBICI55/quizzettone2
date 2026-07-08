@@ -23,6 +23,7 @@ interface InternalPlayer {
   coins: number;
   boardPosition: BoardPosition;
   pendingRoll: number | null;
+  pendingShop: boolean;
   collection: OwnedCard[];
   activeEffects: CardEffectType[];
   pendingQuestion: QuizQuestionInternal | null;
@@ -68,6 +69,7 @@ export class GameSession {
       coins: 50, // gruzzoletto iniziale
       boardPosition: { nodeId: CITTADELLA_ID, onNode: true },
       pendingRoll: null,
+      pendingShop: false,
       collection: [],
       activeEffects: [],
       pendingQuestion: null,
@@ -145,6 +147,7 @@ export class GameSession {
         collection: me.collection,
         activeEffects: me.activeEffects,
         pendingRoll: me.pendingRoll,
+        pendingShop: me.pendingShop,
       },
     };
   }
@@ -254,13 +257,31 @@ export class GameSession {
       ? player.boardPosition.nodeId
       : null;
 
-    if (landedNodeId && landedNodeId !== CITTADELLA_ID) {
+    if (landedNodeId === CITTADELLA_ID) {
+      player.pendingShop = true;
+      // il turno finisce quando lascerà la Cittadella (leaveShop)
+    } else if (landedNodeId) {
       this.startMinigame(player, landedNodeId, io);
       // il turno finisce quando la domanda verrà risolta (submitAnswer)
     } else {
       this.advanceTurn();
     }
 
+    this.broadcastState(io);
+  }
+
+  leaveShop(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Non è il tuo turno.",
+      });
+      return;
+    }
+    if (!player.pendingShop) return;
+    player.pendingShop = false;
+    this.advanceTurn();
     this.broadcastState(io);
   }
 
@@ -398,6 +419,12 @@ export class GameSession {
   buyPack(playerId: string, packId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
+    if (!player.pendingShop) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Devi prima raggiungere la Cittadella con la tua pedina.",
+      });
+      return;
+    }
     const pack = PACKS.find((p) => p.id === packId);
     if (!pack) {
       io.to(player.socketId).emit("error:message", {
