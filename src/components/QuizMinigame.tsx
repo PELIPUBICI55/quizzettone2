@@ -15,7 +15,7 @@ interface Props {
   myCollection: OwnedCard[];
   cardCatalog: CardDef[];
   onUseCard: (cardId: string) => void;
-  onBackToCittadella: () => void;
+  onClose: () => void;
 }
 
 const EFFECT_LABELS: Record<CardEffectType, string> = {
@@ -32,7 +32,7 @@ export function QuizMinigame({
   myCollection,
   cardCatalog,
   onUseCard,
-  onBackToCittadella,
+  onClose,
 }: Props) {
   const { question, activeEffects, eliminatedOptionIndex } = payload;
   const [selected, setSelected] = useState<number | null>(null);
@@ -68,9 +68,11 @@ export function QuizMinigame({
 
   return (
     <div className="quiz-card">
-      <button className="btn-outline" style={{ marginBottom: "1rem" }} onClick={onBackToCittadella}>
-        ← Torna alla Cittadella
-      </button>
+      {result && (
+        <button className="btn-outline" style={{ marginBottom: "1rem" }} onClick={onClose}>
+          ✓ Continua
+        </button>
+      )}
 
       {activeEffects.length > 0 && (
         <div className="effects-row">

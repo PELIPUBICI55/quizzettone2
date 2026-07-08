@@ -1,5 +1,6 @@
 import type { Server } from "socket.io";
 import type {
+  BoardPosition,
   CardEffectType,
   ClientToServerEvents,
   GameStateSnapshot,
@@ -10,6 +11,7 @@ import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
 import { CARD_CATALOG, pickRandomCards } from "../data/cards.js";
 import { PACKS } from "../data/packs.js";
 import { pickRandomQuestion, QuizQuestionInternal } from "../data/questions.js";
+import { BOARD_EDGES, edgeById, neighborsOf } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -19,10 +21,11 @@ interface InternalPlayer {
   name: string;
   isHost: boolean;
   coins: number;
-  currentWorldId: string | null;
+  boardPosition: BoardPosition;
   collection: OwnedCard[];
   activeEffects: CardEffectType[];
   pendingQuestion: QuizQuestionInternal | null;
+  pendingWorldId: string | null; // mondo in cui si trova mentre risolve un minigioco
 }
 
 const BASE_REWARD = 20;
@@ -43,6 +46,8 @@ function nextCardInstanceId() {
 export class GameSession {
   readonly code: string;
   private players = new Map<string, InternalPlayer>();
+  private turnOrder: string[] = [];
+  private currentTurnIndex = 0;
 
   constructor(code: string) {
     this.code = code;
@@ -60,12 +65,14 @@ export class GameSession {
       name: name.trim().slice(0, 20) || "Giocatore",
       isHost,
       coins: 50, // gruzzoletto iniziale
-      currentWorldId: null,
+      boardPosition: { nodeId: CITTADELLA_ID, onNode: true },
       collection: [],
       activeEffects: [],
       pendingQuestion: null,
+      pendingWorldId: null,
     };
     this.players.set(player.id, player);
+    this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
     return player;
   }
 
@@ -78,6 +85,15 @@ export class GameSession {
 
   removePlayer(playerId: string) {
     this.players.delete(playerId);
+    const idx = this.turnOrder.indexOf(playerId);
+    if (idx !== -1) {
+      this.turnOrder.splice(idx, 1);
+      if (this.turnOrder.length > 0) {
+        this.currentTurnIndex = this.currentTurnIndex % this.turnOrder.length;
+      } else {
+        this.currentTurnIndex = 0;
+      }
+    }
     // promuovi un nuovo host se serve
     if (![...this.players.values()].some((p) => p.isHost)) {
       const next = this.players.values().next().value;
@@ -85,20 +101,37 @@ export class GameSession {
     }
   }
 
+  private currentTurnPlayerId(): string | null {
+    if (this.turnOrder.length === 0) return null;
+    return this.turnOrder[this.currentTurnIndex % this.turnOrder.length];
+  }
+
+  private advanceTurn() {
+    if (this.turnOrder.length === 0) return;
+    this.currentTurnIndex = (this.currentTurnIndex + 1) % this.turnOrder.length;
+  }
+
   getSnapshot(forPlayerId: string): GameStateSnapshot | null {
     const me = this.players.get(forPlayerId);
     if (!me) return null;
+
+    const positions: Record<string, BoardPosition> = {};
+    for (const p of this.players.values()) positions[p.id] = p.boardPosition;
+
     return {
       code: this.code,
       worlds: WORLDS,
       packs: PACKS,
       cardCatalog: CARD_CATALOG,
+      board: { edges: BOARD_EDGES },
+      turnOrder: this.turnOrder,
+      currentTurnPlayerId: this.currentTurnPlayerId(),
+      positions,
       players: [...this.players.values()].map((p) => ({
         id: p.id,
         name: p.name,
         coins: p.coins,
         isHost: p.isHost,
-        currentWorldId: p.currentWorldId,
         cardCount: p.collection.length,
       })),
       me: {
@@ -106,7 +139,6 @@ export class GameSession {
         name: me.name,
         coins: me.coins,
         isHost: me.isHost,
-        currentWorldId: me.currentWorldId,
         cardCount: me.collection.length,
         collection: me.collection,
         activeEffects: me.activeEffects,
@@ -121,27 +153,89 @@ export class GameSession {
     }
   }
 
-  enterWorld(playerId: string, worldId: string, io: IOServer) {
+  rollDice(playerId: string, direction: string | undefined, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
 
-    if (worldId !== CITTADELLA_ID && !WORLDS.some((w) => w.id === worldId)) {
+    if (this.currentTurnPlayerId() !== playerId) {
       io.to(player.socketId).emit("error:message", {
-        message: "Mondo sconosciuto.",
+        message: "Non è il tuo turno.",
+      });
+      return;
+    }
+    if (player.pendingQuestion) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Devi prima concludere la prova in corso.",
       });
       return;
     }
 
-    player.currentWorldId = worldId;
-    player.pendingQuestion = null;
+    const roll = 1 + Math.floor(Math.random() * 6);
+    io.emit("board:diceRolled", { playerId, value: roll });
+    this.movePlayer(player, roll, direction, io);
+  }
 
-    if (worldId === CITTADELLA_ID) {
-      this.broadcastState(io);
-      return;
+  private movePlayer(
+    player: InternalPlayer,
+    roll: number,
+    direction: string | undefined,
+    io: IOServer
+  ) {
+    const pos = player.boardPosition;
+
+    if (pos.onNode) {
+      const neighbors = neighborsOf(pos.nodeId);
+      const chosen =
+        neighbors.find((n) => n.neighborId === direction) ?? neighbors[0];
+      if (!chosen) return; // nodo isolato, non dovrebbe succedere
+      const edge = edgeById(chosen.edgeId);
+      if (!edge) return;
+      const newProgress = Math.min(roll, edge.length);
+      if (newProgress >= edge.length) {
+        player.boardPosition = { nodeId: chosen.neighborId, onNode: true };
+      } else {
+        player.boardPosition = {
+          nodeId: pos.nodeId,
+          onNode: false,
+          edgeId: edge.id,
+          progress: newProgress,
+        };
+      }
+    } else {
+      const edge = edgeById(pos.edgeId!);
+      if (!edge) return;
+      const destinationNodeId = edge.a === pos.nodeId ? edge.b : edge.a;
+      const newProgress = Math.min((pos.progress ?? 0) + roll, edge.length);
+      if (newProgress >= edge.length) {
+        player.boardPosition = { nodeId: destinationNodeId, onNode: true };
+      } else {
+        player.boardPosition = {
+          nodeId: pos.nodeId,
+          onNode: false,
+          edgeId: edge.id,
+          progress: newProgress,
+        };
+      }
     }
 
+    const landedNodeId = player.boardPosition.onNode
+      ? player.boardPosition.nodeId
+      : null;
+
+    if (landedNodeId && landedNodeId !== CITTADELLA_ID) {
+      this.startMinigame(player, landedNodeId, io);
+      // il turno finisce quando la domanda verrà risolta (submitAnswer)
+    } else {
+      this.advanceTurn();
+    }
+
+    this.broadcastState(io);
+  }
+
+  private startMinigame(player: InternalPlayer, worldId: string, io: IOServer) {
+    player.pendingWorldId = worldId;
+
     // Per ora l'unico tipo di minigioco implementato è il quiz.
-    // La struttura è già pronta per estendere resultType ad altri tipi.
     const resultType = "quiz" as const;
     const durationMs = 2600;
 
@@ -152,12 +246,9 @@ export class GameSession {
     });
 
     setTimeout(() => {
-      // il giocatore potrebbe essersi spostato nel frattempo
-      if (player.currentWorldId !== worldId) return;
+      if (player.pendingWorldId !== worldId) return;
       this.sendNewQuestion(player, io);
     }, durationMs);
-
-    this.broadcastState(io);
   }
 
   private sendNewQuestion(player: InternalPlayer, io: IOServer) {
@@ -196,6 +287,7 @@ export class GameSession {
       activeEffects: player.activeEffects,
       eliminatedOptionIndex,
     });
+    this.broadcastState(io);
   }
 
   submitAnswer(
@@ -217,7 +309,6 @@ export class GameSession {
         (e) => e !== "skipQuestion"
       );
       this.sendNewQuestion(player, io);
-      this.broadcastState(io);
       return;
     }
 
@@ -237,12 +328,16 @@ export class GameSession {
     );
 
     player.coins += coinsAwarded;
+    player.pendingWorldId = null;
 
     io.to(player.socketId).emit("quiz:result", {
       correct,
       correctIndex: question.correctIndex,
       coinsAwarded,
     });
+
+    // la prova è conclusa: il turno passa al giocatore successivo
+    this.advanceTurn();
     this.broadcastState(io);
   }
 

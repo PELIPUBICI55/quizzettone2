@@ -11,10 +11,12 @@ import { JoinScreen } from "./components/JoinScreen";
 import { Wheel } from "./components/Wheel";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { Cittadella } from "./screens/Cittadella";
+import { Board } from "./components/Board";
 import { CardView } from "./components/CardView";
 
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
+  const [tab, setTab] = useState<"board" | "cittadella">("board");
   const [error, setError] = useState<string | null>(null);
   const [wheelInfo, setWheelInfo] = useState<WheelSpinPayload | null>(null);
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
@@ -76,11 +78,11 @@ export default function App() {
     );
   }
 
-  const backToCittadella = () => {
+  const closeQuiz = () => {
     setQuizPayload(null);
     setQuizResult(null);
     setWheelInfo(null);
-    socket.emit("world:leave");
+    setTab("board");
   };
 
   const currentWorld = state.worlds.find((w) => w.id === wheelInfo?.worldId);
@@ -110,10 +112,20 @@ export default function App() {
             myCollection={state.me.collection}
             cardCatalog={state.cardCatalog}
             onUseCard={(cardId) => socket.emit("card:use", { cardId })}
-            onBackToCittadella={backToCittadella}
+            onClose={closeQuiz}
           />
         ) : (
-          <Cittadella state={state} />
+          <>
+            <div className="join-tabs" style={{ marginBottom: "1.5rem" }}>
+              <button className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}>
+                🗺️ Mappa
+              </button>
+              <button className={tab === "cittadella" ? "active" : ""} onClick={() => setTab("cittadella")}>
+                🏰 Cittadella
+              </button>
+            </div>
+            {tab === "board" ? <Board state={state} /> : <Cittadella state={state} />}
+          </>
         )}
       </div>
 

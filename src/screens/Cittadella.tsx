@@ -1,6 +1,5 @@
 import type { CardDef, GameStateSnapshot, PackDef } from "../../shared/types";
 import { CardView } from "../components/CardView";
-import { WorldMap } from "../components/WorldMap";
 import { socket } from "../socket";
 
 interface Props {
@@ -44,8 +43,8 @@ export function Cittadella({ state }: Props) {
     <div>
       <h2 className="section-title">🏰 La Cittadella</h2>
       <p style={{ color: "var(--text-muted)" }}>
-        Compra pacchetti dal Mercante e completa la tua collezione. Vai negli
-        altri mondi per guadagnare monete.
+        Compra pacchetti dal Mercante e completa la tua collezione. Usa il tab
+        "Mappa" per muovere la tua pedina e guadagnare monete nei mondi.
       </p>
 
       <h3 className="section-title">Il Mercante</h3>
@@ -54,9 +53,6 @@ export function Cittadella({ state }: Props) {
           <PackTile key={p.id} pack={p} canAfford={state.me.coins >= p.cost} />
         ))}
       </div>
-
-      <h3 className="section-title">Parti per un mondo</h3>
-      <WorldMap worlds={state.worlds} />
 
       <h3 className="section-title">
         La tua collezione ({[...ownedCounts.keys()].length}/{state.cardCatalog.length})

@@ -60,12 +60,18 @@ export interface OwnedCard {
   used: boolean; // effetto già attivato: conta ancora nella collezione ma non è più riutilizzabile
 }
 
+export interface BoardPosition {
+  nodeId: string; // nodo corrente (se onNode) oppure nodo di partenza dell'attraversamento
+  onNode: boolean;
+  edgeId?: string; // ponte su cui ci si trova, se non su un nodo
+  progress?: number; // caselle percorse sul ponte (1..length-1)
+}
+
 export interface PlayerSummary {
   id: string;
   name: string;
   coins: number;
   isHost: boolean;
-  currentWorldId: WorldId | null;
   cardCount: number; // quante carte possiede in totale (visibile agli altri, non quali)
 }
 
@@ -81,6 +87,19 @@ export interface GameStateSnapshot {
   cardCatalog: CardDef[];
   players: PlayerSummary[];
   me: MyState;
+  board: { edges: BoardEdgeLike[] };
+  turnOrder: string[];
+  currentTurnPlayerId: string | null;
+  positions: Record<string, BoardPosition>;
+}
+
+// Duplico qui solo la "forma" dell'arco (senza dipendere da shared/board.ts)
+// per evitare un giro di import circolare tra i due file di tipi/dati.
+export interface BoardEdgeLike {
+  id: string;
+  a: string;
+  b: string;
+  length: number;
 }
 
 export interface JoinResult {
@@ -122,8 +141,7 @@ export interface ClientToServerEvents {
     payload: { code: string; name: string },
     cb: (res: JoinResult) => void
   ) => void;
-  "world:enter": (payload: { worldId: WorldId }) => void;
-  "world:leave": () => void;
+  "board:roll": (payload: { direction?: string }) => void;
   "quiz:answer": (payload: {
     questionId: string;
     answerIndex: number | null;
@@ -135,6 +153,7 @@ export interface ClientToServerEvents {
 // Eventi server -> client
 export interface ServerToClientEvents {
   "state:update": (state: GameStateSnapshot) => void;
+  "board:diceRolled": (payload: { playerId: string; value: number }) => void;
   "wheel:spin": (payload: WheelSpinPayload) => void;
   "quiz:question": (payload: QuizQuestionPayload) => void;
   "quiz:result": (payload: QuizResultPayload) => void;

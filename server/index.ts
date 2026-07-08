@@ -42,18 +42,11 @@ io.on("connection", (socket) => {
     session.broadcastState(io);
   });
 
-  socket.on("world:enter", ({ worldId }) => {
+  socket.on("board:roll", ({ direction }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;
     const session = parties.get(loc.code);
-    session?.enterWorld(loc.playerId, worldId, io);
-  });
-
-  socket.on("world:leave", () => {
-    const loc = socketLocation.get(socket.id);
-    if (!loc) return;
-    const session = parties.get(loc.code);
-    session?.enterWorld(loc.playerId, "cittadella", io);
+    session?.rollDice(loc.playerId, direction, io);
   });
 
   socket.on("quiz:answer", ({ questionId, answerIndex }) => {
