@@ -67,6 +67,8 @@ function FloatingIsland({
   pawns,
   highlighted,
   onSelect,
+  name,
+  emoji,
 }: {
   position: [number, number, number];
   color: string;
@@ -76,6 +78,8 @@ function FloatingIsland({
   pawns?: { key: string; color: string; isCurrent: boolean; initial: string; angle: number; offsetR: number }[];
   highlighted?: boolean;
   onSelect?: () => void;
+  name: string;
+  emoji: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const phase = seed * 1.7;
@@ -213,6 +217,20 @@ function FloatingIsland({
           initial={p.initial}
         />
       ))}
+
+      {/* etichetta col nome dell'isola, sempre rivolta verso la camera */}
+      <Billboard position={[0, size * (isCenter ? 1.05 : 0.55), 0]}>
+        <Text
+          fontSize={size * 0.24}
+          color="#f2d98a"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={size * 0.018}
+          outlineColor="#1a0f10"
+        >
+          {emoji} {name}
+        </Text>
+      </Billboard>
     </group>
   );
 }
@@ -568,6 +586,8 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
           size={CITTADELLA_SIZE}
           seed={0}
           isCenter
+          name="Cittadella"
+          emoji="🏰"
           pawns={pawnsByNode.get("cittadella")}
           highlighted={highlightedNodeIds.has("cittadella")}
           onSelect={
@@ -584,6 +604,8 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
             color={w.colorFrom}
             size={WORLD_SIZE}
             seed={i + 1}
+            name={w.name}
+            emoji={w.emoji}
             pawns={pawnsByNode.get(w.id)}
             highlighted={highlightedNodeIds.has(w.id)}
             onSelect={
