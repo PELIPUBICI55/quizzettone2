@@ -5,7 +5,7 @@ import type { WorldDef } from "./types.js";
 export const WORLDS: WorldDef[] = [
   {
     id: "vulcano",
-    name: "Il Vulcano",
+    name: "TOP",
     emoji: "🌋",
     tagline: "Ardente e imprevedibile",
     colorFrom: "#8a2b1d",
@@ -13,7 +13,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "abisso",
-    name: "L'Abisso",
+    name: "TCT",
     emoji: "🌊",
     tagline: "Freddo, profondo, silenzioso",
     colorFrom: "#0f5c73",
@@ -21,7 +21,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "foresta",
-    name: "La Foresta Incantata",
+    name: "GRANDIOSO QUIZ PARTICOLARE",
     emoji: "🌲",
     tagline: "Ogni albero nasconde un segreto",
     colorFrom: "#2f6f4f",
@@ -29,7 +29,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "deserto",
-    name: "Il Deserto",
+    name: "OCHO ALLA BOMBA",
     emoji: "🏜️",
     tagline: "Miraggi e rovine sepolte",
     colorFrom: "#c98a2c",
@@ -37,7 +37,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "ghiacciaia",
-    name: "La Ghiacciaia",
+    name: "ACCHIAPPA LA PAPERA",
     emoji: "❄️",
     tagline: "Non tutto ciò che è ghiacciato è morto",
     colorFrom: "#4f8fbf",
@@ -45,7 +45,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "cieli",
-    name: "Il Regno dei Cieli",
+    name: "IL GRANDIOSO BUZZ",
     emoji: "☁️",
     tagline: "Sopra le nuvole, oltre le regole",
     colorFrom: "#7a6bc4",
@@ -53,7 +53,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "rovine",
-    name: "Le Rovine Perdute",
+    name: "3/4",
     emoji: "🏛️",
     tagline: "Ciò che resta di un impero dimenticato",
     colorFrom: "#8a7a4f",
@@ -61,7 +61,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "officina",
-    name: "L'Officina degli Ingranaggi",
+    name: "CARO AMICO TI SCRIVO",
     emoji: "⚙️",
     tagline: "Dove tutto ha un meccanismo",
     colorFrom: "#7d7d7d",

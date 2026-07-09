@@ -75,7 +75,7 @@ function FloatingIsland({
   size: number;
   seed: number;
   isCenter?: boolean;
-  pawns?: { key: string; color: string; isCurrent: boolean; initial: string; angle: number; offsetR: number }[];
+  pawns?: { key: string; color: string; isCurrent: boolean; name: string; angle: number; offsetR: number }[];
   highlighted?: boolean;
   onSelect?: () => void;
   name: string;
@@ -214,7 +214,7 @@ function FloatingIsland({
           position={[Math.cos(p.angle) * p.offsetR, size * 0.11 + 0.12, Math.sin(p.angle) * p.offsetR]}
           color={p.color}
           isCurrent={p.isCurrent}
-          initial={p.initial}
+          name={p.name}
         />
       ))}
 
@@ -405,12 +405,12 @@ function PawnToken({
   position,
   color,
   isCurrent,
-  initial,
+  name,
 }: {
   position: [number, number, number];
   color: string;
   isCurrent: boolean;
-  initial: string;
+  name: string;
 }) {
   return (
     <group position={position}>
@@ -427,12 +427,15 @@ function PawnToken({
         <meshStandardMaterial color={color} roughness={0.5} />
       </mesh>
       <Billboard position={[0, 1.05, 0]}>
-        <mesh>
-          <circleGeometry args={[0.22, 20]} />
-          <meshStandardMaterial color="#241417" />
-        </mesh>
-        <Text fontSize={0.26} color="#f2d98a" anchorX="center" anchorY="middle" position={[0, 0, 0.01]}>
-          {initial}
+        <Text
+          fontSize={0.32}
+          color="#f2d98a"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.025}
+          outlineColor="#1a0f10"
+        >
+          {name}
         </Text>
       </Billboard>
     </group>
@@ -477,7 +480,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
       key: playerId,
       color: PLAYER_COLORS[colorIdx],
       isCurrent: playerId === state.currentTurnPlayerId,
-      initial: player?.name.slice(0, 1).toUpperCase() ?? "?",
+      name: player?.name ?? "?",
       angle,
       offsetR,
     };
@@ -620,7 +623,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
             position={point}
             color={descriptor.color}
             isCurrent={descriptor.isCurrent}
-            initial={descriptor.initial}
+            name={descriptor.name}
           />
         ))}
 
