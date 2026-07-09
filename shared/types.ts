@@ -102,6 +102,7 @@ export interface BoardEdgeLike {
   a: string;
   b: string;
   length: number;
+  surprises: number[];
 }
 
 export interface JoinResult {
@@ -158,6 +159,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   "state:update": (state: GameStateSnapshot) => void;
   "board:diceRolled": (payload: { playerId: string; value: number }) => void;
+  "board:surprise": (payload: { playerId: string; message: string }) => void;
   "wheel:spin": (payload: WheelSpinPayload) => void;
   "quiz:question": (payload: QuizQuestionPayload) => void;
   "quiz:result": (payload: QuizResultPayload) => void;

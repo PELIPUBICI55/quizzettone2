@@ -223,12 +223,14 @@ function Bridge3D({
   length,
   radiusA,
   radiusB,
+  surprises,
 }: {
   a: [number, number, number];
   b: [number, number, number];
   length: number;
   radiusA: number;
   radiusB: number;
+  surprises: number[];
 }) {
   const fullDx = b[0] - a[0];
   const fullDz = b[2] - a[2];
@@ -277,12 +279,35 @@ function Bridge3D({
   return (
     <group>
       {/* tavole di legno del ponte, ben distanziate tra loro */}
-      {planks.map((p, i) => (
-        <mesh key={i} position={[p.x, p.y, p.z]} rotation={[0, angle, 0]} castShadow receiveShadow>
-          <boxGeometry args={[2, 0.16, (dist / length) * 0.62]} />
-          <meshStandardMaterial color="#8a5a30" roughness={0.9} flatShading />
-        </mesh>
-      ))}
+      {planks.map((p, i) => {
+        const isSurprise = surprises.includes(i + 1);
+        return (
+          <group key={i}>
+            <mesh position={[p.x, p.y, p.z]} rotation={[0, angle, 0]} castShadow receiveShadow>
+              <boxGeometry args={[2, 0.16, (dist / length) * 0.62]} />
+              <meshStandardMaterial
+                color={isSurprise ? "#2f9e6f" : "#8a5a30"}
+                emissive={isSurprise ? "#2f9e6f" : "#000000"}
+                emissiveIntensity={isSurprise ? 0.5 : 0}
+                roughness={0.85}
+                flatShading
+                toneMapped={false}
+              />
+            </mesh>
+            {isSurprise && (
+              <Billboard position={[p.x, p.y + 0.7, p.z]}>
+                <mesh>
+                  <circleGeometry args={[0.26, 20]} />
+                  <meshStandardMaterial color="#123d2b" emissive="#2f9e6f" emissiveIntensity={0.6} toneMapped={false} />
+                </mesh>
+                <Text fontSize={0.32} color="#baffd9" anchorX="center" anchorY="middle" position={[0, 0, 0.01]}>
+                  ?
+                </Text>
+              </Billboard>
+            )}
+          </group>
+        );
+      })}
 
       {/* corrimano di corda */}
       <Line points={railSide(1)} color="#c9a875" lineWidth={2.5} />
@@ -532,6 +557,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
               length={edge.length}
               radiusA={islandRadius(edge.a)}
               radiusB={islandRadius(edge.b)}
+              surprises={edge.surprises}
             />
           );
         })}

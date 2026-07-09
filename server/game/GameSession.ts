@@ -263,10 +263,47 @@ export class GameSession {
       this.startMinigame(player, landedNodeId, io);
       // il turno finisce quando la domanda verrà risolta (submitAnswer)
     } else {
-      this.advanceTurn();
+      // ancora a metà ponte: controlla se è capitato su una casella imprevisto
+      const edge = edgeById(player.boardPosition.edgeId!);
+      const progress = player.boardPosition.progress!;
+      const isSurprise = !!edge?.surprises.includes(progress);
+      const advance = isSurprise ? this.triggerSurprise(player, io) : true;
+      if (advance) this.advanceTurn();
     }
 
     this.broadcastState(io);
+  }
+
+  // Applica un effetto casuale quando un giocatore atterra su una casella
+  // "imprevisto". Ritorna false se il turno NON deve avanzare (es. tiro extra).
+  private triggerSurprise(player: InternalPlayer, io: IOServer): boolean {
+    const roll = Math.random();
+    let message: string;
+    let advance = true;
+
+    if (roll < 0.3) {
+      const amount = 20;
+      player.coins += amount;
+      message = `✨ Imprevisto fortunato! +${amount} monete`;
+    } else if (roll < 0.5) {
+      const amount = Math.min(player.coins, 10);
+      player.coins -= amount;
+      message = `⚡ Imprevisto sfortunato! -${amount} monete`;
+    } else if (roll < 0.75) {
+      const [card] = pickRandomCards(1);
+      player.collection.push({
+        instanceId: nextCardInstanceId(),
+        cardId: card.id,
+        used: false,
+      });
+      message = `🎴 Imprevisto magico! Hai trovato "${card.name}"`;
+    } else {
+      advance = false;
+      message = "🎲 Imprevisto fortunato! Tira di nuovo";
+    }
+
+    io.emit("board:surprise", { playerId: player.id, message });
+    return advance;
   }
 
   leaveShop(playerId: string, io: IOServer) {

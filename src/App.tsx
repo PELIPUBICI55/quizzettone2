@@ -23,6 +23,7 @@ export default function App() {
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
+  const [surpriseMessage, setSurpriseMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const onState = (s: GameStateSnapshot) => setState(s);
@@ -38,6 +39,7 @@ export default function App() {
     };
     const onResult = (p: QuizResultPayload) => setQuizResult(p);
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
+    const onSurprise = (p: { playerId: string; message: string }) => setSurpriseMessage(p.message);
     const onError = (p: { message: string }) => setError(p.message);
     const onDisconnect = () => setState(null);
 
@@ -46,6 +48,7 @@ export default function App() {
     socket.on("quiz:question", onQuestion);
     socket.on("quiz:result", onResult);
     socket.on("shop:packOpened", onPack);
+    socket.on("board:surprise", onSurprise);
     socket.on("error:message", onError);
     socket.on("disconnect", onDisconnect);
 
@@ -55,10 +58,17 @@ export default function App() {
       socket.off("quiz:question", onQuestion);
       socket.off("quiz:result", onResult);
       socket.off("shop:packOpened", onPack);
+      socket.off("board:surprise", onSurprise);
       socket.off("error:message", onError);
       socket.off("disconnect", onDisconnect);
     };
   }, []);
+
+  useEffect(() => {
+    if (!surpriseMessage) return;
+    const t = setTimeout(() => setSurpriseMessage(null), 3500);
+    return () => clearTimeout(t);
+  }, [surpriseMessage]);
 
   useEffect(() => {
     if (!error) return;
@@ -120,6 +130,12 @@ export default function App() {
           state.me.pendingShop ? <Cittadella state={state} /> : <Board state={state} />
         )}
       </div>
+
+      {surpriseMessage && (
+        <div className="surprise-banner">
+          <span>{surpriseMessage}</span>
+        </div>
+      )}
 
       {packOpened && (
         <div className="reveal-overlay" onClick={() => setPackOpened(null)}>
