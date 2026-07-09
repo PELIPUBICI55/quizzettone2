@@ -62,18 +62,23 @@ function FloatingIsland({
 
   const cloudPuffs = useMemo(() => {
     const arr: { x: number; z: number; y: number; s: number }[] = [];
-    const count = 6;
+    const count = 7;
+    const platformBottom = size * 0.08; // le nuvole devono toccare qui il fondo della piattaforma, non oltre
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + rand(seed + i) * 0.4;
-      const r = size * 0.4 * (0.7 + rand(seed + i * 3) * 0.35);
+      const a = (i / count) * Math.PI * 2 + rand(seed + i) * 0.35;
+      const ringR = size * 0.4 * (0.55 + rand(seed + i * 3) * 0.5);
+      const puffR = size * (0.2 + rand(seed + i * 7) * 0.16);
+      const jitter = (rand(seed + i * 11) - 0.5) * size * 0.04;
       arr.push({
-        x: Math.cos(a) * r,
-        z: Math.sin(a) * r,
-        y: -size * 0.16 + rand(seed + i * 5) * size * 0.1,
-        s: size * (0.36 + rand(seed + i * 7) * 0.22),
+        x: Math.cos(a) * ringR,
+        z: Math.sin(a) * ringR,
+        y: -platformBottom - puffR + jitter,
+        s: puffR,
       });
     }
-    arr.push({ x: 0, z: 0, y: -size * 0.2, s: size * 0.58 });
+    // grosso cumulo centrale, per riempire il volume sotto la piattaforma
+    const centerR = size * 0.48;
+    arr.push({ x: 0, z: 0, y: -platformBottom - centerR * 0.85, s: centerR });
     return arr;
   }, [seed, size]);
 
