@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Line, Billboard, Text } from "@react-three/drei";
 import type * as THREE from "three";
-import type { BoardPosition, GameStateSnapshot, WorldDef } from "../../shared/types";
+import type { GameStateSnapshot, WorldDef } from "../../shared/types";
 
 const RADIUS = 13;
 
@@ -37,18 +37,45 @@ function islandRadius(nodeId: string): number {
   return size * 0.65;
 }
 
+// Calcola inizio/fine effettivi del ponte (accorciato rispetto ai centri
+// delle isole, per non compenetrarle). Usato sia da Bridge3D per disegnare
+// le tavole sia dal calcolo della posizione delle pedine, così coincidono sempre.
+function bridgeSpan(
+  a: [number, number, number],
+  b: [number, number, number],
+  radiusA: number,
+  radiusB: number
+): { start: [number, number, number]; end: [number, number, number] } {
+  const dx = b[0] - a[0];
+  const dz = b[2] - a[2];
+  const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+  const margin = 0.6;
+  const tStart = (radiusA + margin) / dist;
+  const tEnd = 1 - (radiusB + margin) / dist;
+  return {
+    start: [a[0] + dx * tStart, a[1] + (b[1] - a[1]) * tStart, a[2] + dz * tStart],
+    end: [a[0] + dx * tEnd, a[1] + (b[1] - a[1]) * tEnd, a[2] + dz * tEnd],
+  };
+}
+
 function FloatingIsland({
   position,
   color,
   size,
   seed,
   isCenter,
+  pawns,
+  highlighted,
+  onSelect,
 }: {
   position: [number, number, number];
   color: string;
   size: number;
   seed: number;
   isCenter?: boolean;
+  pawns?: { key: string; color: string; isCurrent: boolean; initial: string; angle: number; offsetR: number }[];
+  highlighted?: boolean;
+  onSelect?: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const phase = seed * 1.7;
@@ -112,13 +139,27 @@ function FloatingIsland({
         <cylinderGeometry args={[size * 0.62, size * 0.68, size * 0.22, 8]} />
         <meshStandardMaterial color={color} roughness={0.75} flatShading />
       </mesh>
-      {/* anello di energia magica */}
-      <mesh position={[0, -size * 0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[size * 0.68, 0.05, 8, 32]} />
+      {/* anello di energia magica: diventa un bersaglio pulsante e cliccabile quando evidenziato */}
+      <mesh
+        position={[0, -size * 0.08, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        scale={highlighted ? 1.25 : 1}
+        onClick={
+          onSelect
+            ? (e) => {
+                e.stopPropagation();
+                onSelect();
+              }
+            : undefined
+        }
+        onPointerOver={onSelect ? () => (document.body.style.cursor = "pointer") : undefined}
+        onPointerOut={onSelect ? () => (document.body.style.cursor = "auto") : undefined}
+      >
+        <torusGeometry args={[size * 0.68, highlighted ? 0.12 : 0.05, 8, 32]} />
         <meshStandardMaterial
-          color="#e879f9"
-          emissive="#e879f9"
-          emissiveIntensity={1.3}
+          color={highlighted ? "#4ade80" : "#e879f9"}
+          emissive={highlighted ? "#4ade80" : "#e879f9"}
+          emissiveIntensity={highlighted ? 2 : 1.3}
           toneMapped={false}
         />
       </mesh>
@@ -160,6 +201,18 @@ function FloatingIsland({
           )
         )
       )}
+
+      {/* pedine posate su questa isola: sono figlie dello stesso gruppo animato,
+          quindi fluttuano insieme alla piattaforma senza sfasarsi mai */}
+      {pawns?.map((p) => (
+        <PawnToken
+          key={p.key}
+          position={[Math.cos(p.angle) * p.offsetR, size * 0.11 + 0.12, Math.sin(p.angle) * p.offsetR]}
+          color={p.color}
+          isCurrent={p.isCurrent}
+          initial={p.initial}
+        />
+      ))}
     </group>
   );
 }
@@ -183,21 +236,7 @@ function Bridge3D({
   const dirx = fullDx / fullDist;
   const dirz = fullDz / fullDist;
 
-  // accorcia il ponte per non compenetrare le isole: parte e finisce
-  // appena fuori dal bordo della piattaforma, non dal centro dell'isola
-  const margin = 0.6;
-  const tStart = (radiusA + margin) / fullDist;
-  const tEnd = 1 - (radiusB + margin) / fullDist;
-  const start: [number, number, number] = [
-    a[0] + fullDx * tStart,
-    a[1] + (b[1] - a[1]) * tStart,
-    a[2] + fullDz * tStart,
-  ];
-  const end: [number, number, number] = [
-    a[0] + fullDx * tEnd,
-    a[1] + (b[1] - a[1]) * tEnd,
-    a[2] + fullDz * tEnd,
-  ];
+  const { start, end } = bridgeSpan(a, b, radiusA, radiusB);
 
   const dx = end[0] - start[0];
   const dz = end[2] - start[2];
@@ -283,6 +322,42 @@ function Bridge3D({
   );
 }
 
+function TargetMarker({
+  point,
+  onSelect,
+}: {
+  point: [number, number, number];
+  onSelect: () => void;
+}) {
+  const ringRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (!ringRef.current) return;
+    const s = 1 + Math.sin(clock.getElapsedTime() * 4) * 0.15;
+    ringRef.current.scale.set(s, 1, s);
+  });
+
+  return (
+    <group position={point}>
+      <mesh
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onPointerOver={() => (document.body.style.cursor = "pointer")}
+        onPointerOut={() => (document.body.style.cursor = "auto")}
+      >
+        <cylinderGeometry args={[0.8, 0.8, 0.05, 20]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.5, 0.09, 10, 26]} />
+        <meshStandardMaterial color="#4ade80" emissive="#4ade80" emissiveIntensity={1.8} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function PawnToken({
   position,
   color,
@@ -323,6 +398,12 @@ function PawnToken({
 
 interface Props {
   state: GameStateSnapshot;
+  directionChoice?: {
+    nodeId: string;
+    neighbors: { edgeId: string; neighborId: string }[];
+    roll: number;
+  } | null;
+  onSelectDirection?: (neighborId: string) => void;
 }
 
 const PLAYER_COLORS = [
@@ -336,25 +417,90 @@ const PLAYER_COLORS = [
   "#e07a9c",
 ];
 
-export function BoardScene3D({ state }: Props) {
+export function BoardScene3D({ state, directionChoice, onSelectDirection }: Props) {
+  // raggruppa le pedine per nodo/arco, per distanziare quelle sovrapposte
   const grouped = new Map<string, string[]>();
   for (const [playerId, pos] of Object.entries(state.positions)) {
     const key = pos.onNode ? `n-${pos.nodeId}` : `e-${pos.edgeId}-${pos.progress}`;
     grouped.set(key, [...(grouped.get(key) ?? []), playerId]);
   }
 
-  const pawnPosition = (pos: BoardPosition): [number, number, number] => {
-    if (pos.onNode) return nodePos3D(pos.nodeId, state.worlds);
-    const edge = state.board.edges.find((e) => e.id === pos.edgeId);
-    if (!edge) return nodePos3D(pos.nodeId, state.worlds);
-    const other = edge.a === pos.nodeId ? edge.b : edge.a;
-    const a = nodePos3D(pos.nodeId, state.worlds);
-    const b = nodePos3D(other, state.worlds);
-    const t = (pos.progress ?? 0) / edge.length;
-    const dip = Math.sin(t * Math.PI) * 0.4;
-    const base = lerp3(a, b, t);
-    return [base[0], base[1] - dip, base[2]];
+  const pawnDescriptor = (playerId: string, slot: number, total: number) => {
+    const angle = (slot * 2 * Math.PI) / Math.max(total, 1);
+    const offsetR = total > 1 ? 0.9 : 0;
+    const colorIdx = state.turnOrder.indexOf(playerId) % PLAYER_COLORS.length;
+    const player = state.players.find((p) => p.id === playerId);
+    return {
+      key: playerId,
+      color: PLAYER_COLORS[colorIdx],
+      isCurrent: playerId === state.currentTurnPlayerId,
+      initial: player?.name.slice(0, 1).toUpperCase() ?? "?",
+      angle,
+      offsetR,
+    };
   };
+
+  // pedine per nodo (rese come figlie della rispettiva isola, per fluttuare insieme)
+  const pawnsByNode = new Map<string, ReturnType<typeof pawnDescriptor>[]>();
+  // pedine a metà ponte, con la loro posizione mondo già calcolata
+  const bridgePawns: { descriptor: ReturnType<typeof pawnDescriptor>; point: [number, number, number] }[] = [];
+
+  for (const [, playerIds] of grouped.entries()) {
+    playerIds.forEach((playerId, slot) => {
+      const pos = state.positions[playerId];
+      if (!pos) return;
+      const descriptor = pawnDescriptor(playerId, slot, playerIds.length);
+      if (pos.onNode) {
+        const list = pawnsByNode.get(pos.nodeId) ?? [];
+        list.push(descriptor);
+        pawnsByNode.set(pos.nodeId, list);
+      } else {
+        const edge = state.board.edges.find((e) => e.id === pos.edgeId);
+        if (!edge) return;
+        const other = edge.a === pos.nodeId ? edge.b : edge.a;
+        const a = nodePos3D(pos.nodeId, state.worlds);
+        const b = nodePos3D(other, state.worlds);
+        const { start, end } = bridgeSpan(a, b, islandRadius(pos.nodeId), islandRadius(other));
+        const progress = pos.progress ?? 1;
+        // centro della tavola corrispondente (non il confine tra due tavole)
+        const t = (progress - 0.5) / edge.length;
+        const dip = Math.sin(t * Math.PI) * 0.35;
+        const base = lerp3(start, end, t);
+        bridgePawns.push({
+          descriptor,
+          point: [base[0] + Math.cos(descriptor.angle) * descriptor.offsetR * 0.3, base[1] - dip + 0.28, base[2] + Math.sin(descriptor.angle) * descriptor.offsetR * 0.3],
+        });
+      }
+    });
+  }
+
+  // marcatori delle destinazioni raggiungibili dopo il tiro, per la scelta a click
+  const highlightedNodeIds = new Set<string>();
+  const midBridgeTargets: { neighborId: string; point: [number, number, number] }[] = [];
+
+  if (directionChoice) {
+    const originPos = nodePos3D(directionChoice.nodeId, state.worlds);
+    for (const n of directionChoice.neighbors) {
+      const edge = state.board.edges.find((e) => e.id === n.edgeId);
+      if (!edge) continue;
+      const reach = Math.min(directionChoice.roll, edge.length);
+      if (reach >= edge.length) {
+        highlightedNodeIds.add(n.neighborId);
+      } else {
+        const destPos = nodePos3D(n.neighborId, state.worlds);
+        const { start, end } = bridgeSpan(
+          originPos,
+          destPos,
+          islandRadius(directionChoice.nodeId),
+          islandRadius(n.neighborId)
+        );
+        const t = (reach - 0.5) / edge.length;
+        const dip = Math.sin(t * Math.PI) * 0.35;
+        const base = lerp3(start, end, t);
+        midBridgeTargets.push({ neighborId: n.neighborId, point: [base[0], base[1] - dip + 0.35, base[2]] });
+      }
+    }
+  }
 
   return (
     <div style={{ width: "100%", height: "min(70vh, 640px)", borderRadius: 16, overflow: "hidden" }}>
@@ -391,7 +537,20 @@ export function BoardScene3D({ state }: Props) {
           );
         })}
 
-        <FloatingIsland position={[0, 0, 0]} color="#c9a227" size={CITTADELLA_SIZE} seed={0} isCenter />
+        <FloatingIsland
+          position={[0, 0, 0]}
+          color="#c9a227"
+          size={CITTADELLA_SIZE}
+          seed={0}
+          isCenter
+          pawns={pawnsByNode.get("cittadella")}
+          highlighted={highlightedNodeIds.has("cittadella")}
+          onSelect={
+            highlightedNodeIds.has("cittadella") && onSelectDirection
+              ? () => onSelectDirection("cittadella")
+              : undefined
+          }
+        />
 
         {state.worlds.map((w, i) => (
           <FloatingIsland
@@ -400,35 +559,28 @@ export function BoardScene3D({ state }: Props) {
             color={w.colorFrom}
             size={WORLD_SIZE}
             seed={i + 1}
+            pawns={pawnsByNode.get(w.id)}
+            highlighted={highlightedNodeIds.has(w.id)}
+            onSelect={
+              highlightedNodeIds.has(w.id) && onSelectDirection ? () => onSelectDirection(w.id) : undefined
+            }
           />
         ))}
 
-        {[...grouped.entries()].flatMap(([, playerIds]) =>
-          playerIds.map((playerId, slot) => {
-            const pos = state.positions[playerId];
-            if (!pos) return null;
-            const base = pawnPosition(pos);
-            const offsetAngle = (slot * 2 * Math.PI) / Math.max(playerIds.length, 1);
-            const offsetR = playerIds.length > 1 ? 0.9 : 0;
-            const finalPos: [number, number, number] = [
-              base[0] + Math.cos(offsetAngle) * offsetR,
-              base[1] + 0.3,
-              base[2] + Math.sin(offsetAngle) * offsetR,
-            ];
-            const colorIdx = state.turnOrder.indexOf(playerId) % PLAYER_COLORS.length;
-            const player = state.players.find((p) => p.id === playerId);
-            const isCurrent = playerId === state.currentTurnPlayerId;
-            return (
-              <PawnToken
-                key={playerId}
-                position={finalPos}
-                color={PLAYER_COLORS[colorIdx]}
-                isCurrent={isCurrent}
-                initial={player?.name.slice(0, 1).toUpperCase() ?? "?"}
-              />
-            );
-          })
-        )}
+        {bridgePawns.map(({ descriptor, point }) => (
+          <PawnToken
+            key={descriptor.key}
+            position={point}
+            color={descriptor.color}
+            isCurrent={descriptor.isCurrent}
+            initial={descriptor.initial}
+          />
+        ))}
+
+        {onSelectDirection &&
+          midBridgeTargets.map((t) => (
+            <TargetMarker key={t.neighborId} point={t.point} onSelect={() => onSelectDirection(t.neighborId)} />
+          ))}
       </Canvas>
     </div>
   );

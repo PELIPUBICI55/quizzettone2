@@ -1,6 +1,6 @@
 import { WORLDS, CITTADELLA_ID } from "./worldsData.js";
 
-export const BRIDGE_LENGTH = 6;
+export const BRIDGE_LENGTH = 5;
 
 export interface BoardEdge {
   id: string;
