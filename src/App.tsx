@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   GameStateSnapshot,
+  MinigameType,
   PackOpenedPayload,
   QuizQuestionPayload,
   QuizResultPayload,
@@ -8,7 +9,9 @@ import type {
 } from "../shared/types";
 import { socket } from "./socket";
 import { JoinScreen } from "./components/JoinScreen";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Wheel } from "./components/Wheel";
+import { WheelResultScreen } from "./components/WheelResultScreen";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { QuizSpectatorView } from "./components/QuizSpectatorView";
 import { Cittadella } from "./screens/Cittadella";
@@ -23,7 +26,13 @@ import { CardView } from "./components/CardView";
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [welcomeInfo, setWelcomeInfo] = useState<{ playerId: string; worldId: string } | null>(null);
   const [wheelInfo, setWheelInfo] = useState<WheelSpinPayload | null>(null);
+  const [wheelResultInfo, setWheelResultInfo] = useState<{
+    playerId: string;
+    worldId: string;
+    resultType: MinigameType;
+  } | null>(null);
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
@@ -39,13 +48,26 @@ export default function App() {
       prevPhase.current = s.phase;
       setState(s);
     };
-    const onWheel = (p: WheelSpinPayload) => {
-      setWheelInfo(p);
+    const onWelcome = (p: { playerId: string; worldId: string }) => {
+      setWelcomeInfo(p);
+      setWheelInfo(null);
+      setWheelResultInfo(null);
       setQuizPayload(null);
       setQuizResult(null);
     };
-    const onQuestion = (p: QuizQuestionPayload) => {
+    const onWheel = (p: WheelSpinPayload) => {
+      setWelcomeInfo(null);
+      setWheelInfo(p);
+      setWheelResultInfo(null);
+      setQuizPayload(null);
+      setQuizResult(null);
+    };
+    const onWheelResult = (p: { playerId: string; worldId: string; resultType: MinigameType }) => {
       setWheelInfo(null);
+      setWheelResultInfo(p);
+    };
+    const onQuestion = (p: QuizQuestionPayload) => {
+      setWheelResultInfo(null);
       setQuizPayload(p);
       setQuizResult(null);
     };
@@ -62,7 +84,9 @@ export default function App() {
     const onDisconnect = () => setState(null);
 
     socket.on("state:update", onState);
+    socket.on("world:welcome", onWelcome);
     socket.on("wheel:spin", onWheel);
+    socket.on("wheel:result", onWheelResult);
     socket.on("quiz:question", onQuestion);
     socket.on("quiz:result", onResult);
     socket.on("shop:packOpened", onPack);
@@ -73,7 +97,9 @@ export default function App() {
 
     return () => {
       socket.off("state:update", onState);
+      socket.off("world:welcome", onWelcome);
       socket.off("wheel:spin", onWheel);
+      socket.off("wheel:result", onWheelResult);
       socket.off("quiz:question", onQuestion);
       socket.off("quiz:result", onResult);
       socket.off("shop:packOpened", onPack);
@@ -86,7 +112,9 @@ export default function App() {
 
   useEffect(() => {
     if (!state) return;
+    setWelcomeInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setWheelInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setWheelResultInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizPayload((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizResult((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,8 +172,12 @@ export default function App() {
     setWheelInfo(null);
   };
 
-  const currentWorld = state.worlds.find((w) => w.id === wheelInfo?.worldId);
+  const currentWorld = state.worlds.find(
+    (w) => w.id === (welcomeInfo?.worldId ?? wheelInfo?.worldId)
+  );
+  const welcomePlayer = state.players.find((p) => p.id === welcomeInfo?.playerId);
   const wheelPlayer = state.players.find((p) => p.id === wheelInfo?.playerId);
+  const wheelResultPlayer = state.players.find((p) => p.id === wheelResultInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
   return (
@@ -164,12 +196,24 @@ export default function App() {
       <div className="main-area">
         {error && <div className="error-banner">{error}</div>}
 
-        {wheelInfo ? (
+        {welcomeInfo ? (
+          <WelcomeScreen
+            world={currentWorld}
+            isMine={welcomeInfo.playerId === state.me.id}
+            playerName={welcomePlayer?.name ?? "?"}
+          />
+        ) : wheelInfo ? (
           <Wheel
             worldName={currentWorld?.name ?? ""}
             worldEmoji={currentWorld?.emoji ?? "🎡"}
             playerName={wheelPlayer?.name ?? "?"}
             isMine={wheelInfo.playerId === state.me.id}
+          />
+        ) : wheelResultInfo ? (
+          <WheelResultScreen
+            resultType={wheelResultInfo.resultType}
+            isMine={wheelResultInfo.playerId === state.me.id}
+            playerName={wheelResultPlayer?.name ?? "?"}
           />
         ) : quizPayload ? (
           quizPayload.playerId === state.me.id ? (

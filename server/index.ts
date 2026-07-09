@@ -40,6 +40,7 @@ io.on("connection", (socket) => {
     socketLocation.set(socket.id, { code: session.code, playerId: player.id });
     cb({ ok: true, code: session.code });
     session.broadcastState(io);
+    session.resendPendingScreens(player.id, io);
     session.resendPendingQuestion(player.id, io);
   });
 
@@ -70,6 +71,20 @@ io.on("connection", (socket) => {
     if (!loc) return;
     const session = parties.get(loc.code);
     session?.rollDice(loc.playerId, io);
+  });
+
+  socket.on("board:beginMinigame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginMinigame(loc.playerId, io);
+  });
+
+  socket.on("board:beginQuiz", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginQuiz(loc.playerId, io);
   });
 
   socket.on("board:confirmMove", ({ direction }) => {

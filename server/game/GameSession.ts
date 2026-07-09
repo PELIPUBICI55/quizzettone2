@@ -32,6 +32,8 @@ interface InternalPlayer {
   activeEffects: CardEffectType[];
   pendingQuestion: QuizQuestionInternal | null;
   pendingWorldId: string | null; // mondo in cui si trova mentre risolve un minigioco
+  awaitingWheelStart: boolean; // sulla schermata di benvenuto, in attesa che clicchi "Ok iniziamo"
+  awaitingQuizStart: boolean; // sulla schermata di risultato ruota, in attesa che clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
@@ -91,6 +93,8 @@ export class GameSession {
       activeEffects: [],
       pendingQuestion: null,
       pendingWorldId: null,
+      awaitingWheelStart: false,
+      awaitingQuizStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -103,6 +107,25 @@ export class GameSession {
   markDisconnected(playerId: string) {
     const player = this.players.get(playerId);
     if (player) player.connected = false;
+  }
+
+  // Se chi rientra era sulla schermata di benvenuto o su quella di risultato
+  // della ruota, gliele rimanda così può continuare da dove aveva lasciato.
+  resendPendingScreens(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (player.awaitingWheelStart && player.pendingWorldId) {
+      io.to(player.socketId).emit("world:welcome", {
+        playerId: player.id,
+        worldId: player.pendingWorldId,
+      });
+    } else if (player.awaitingQuizStart && player.pendingWorldId) {
+      io.to(player.socketId).emit("wheel:result", {
+        playerId: player.id,
+        worldId: player.pendingWorldId,
+        resultType: "quiz",
+      });
+    }
   }
 
   // Se chi rientra aveva una domanda del quiz ancora aperta al momento della
@@ -398,7 +421,7 @@ export class GameSession {
       player.pendingShop = true;
       // il turno finisce quando lascerà la Cittadella (leaveShop)
     } else if (landedNodeId) {
-      this.startMinigame(player, landedNodeId, io);
+      this.arriveAtWorld(player, landedNodeId, io);
       // il turno finisce quando la domanda verrà risolta (submitAnswer)
     } else {
       // ancora a metà ponte: controlla se è capitato su una casella imprevisto
@@ -459,9 +482,23 @@ export class GameSession {
     this.broadcastState(io);
   }
 
-  private startMinigame(player: InternalPlayer, worldId: string, io: IOServer) {
+  private arriveAtWorld(player: InternalPlayer, worldId: string, io: IOServer) {
     player.pendingWorldId = worldId;
+    player.awaitingWheelStart = true;
+    io.emit("world:welcome", { playerId: player.id, worldId });
+  }
 
+  beginMinigame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingWheelStart) return;
+    player.awaitingWheelStart = false;
+
+    const worldId = player.pendingWorldId!;
     // Per ora l'unico tipo di minigioco implementato è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -475,8 +512,21 @@ export class GameSession {
 
     setTimeout(() => {
       if (player.pendingWorldId !== worldId) return;
-      this.sendNewQuestion(player, io);
+      player.awaitingQuizStart = true;
+      io.emit("wheel:result", { playerId: player.id, worldId, resultType });
     }, durationMs);
+  }
+
+  beginQuiz(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingQuizStart) return;
+    player.awaitingQuizStart = false;
+    this.sendNewQuestion(player, io);
   }
 
   private sendNewQuestion(player: InternalPlayer, io: IOServer) {
