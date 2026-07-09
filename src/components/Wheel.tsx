@@ -11,11 +11,13 @@ export function Wheel({ worldName, worldEmoji, playerName, isMine }: Props) {
       <h2>
         {worldEmoji} {worldName}
       </h2>
-      <p style={{ color: "var(--text-muted)" }}>
-        {isMine
-          ? "La ruota sta decidendo la prova che dovrai affrontare…"
-          : `La ruota sta decidendo la prova per ${playerName}…`}
-      </p>
+      <div className="wheel-text-panel">
+        <p>
+          {isMine
+            ? "La ruota sta decidendo la prova che dovrai affrontare…"
+            : `La ruota sta decidendo la prova per ${playerName}…`}
+        </p>
+      </div>
       <div style={{ position: "relative" }}>
         <div className="wheel-pointer" />
         <div className="wheel spinning" />

@@ -346,6 +346,37 @@ input {
   gap: 1.5rem;
 }
 
+.wheel-wrap h1,
+.wheel-wrap h2 {
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.wheel-text-panel {
+  background: rgba(39, 24, 25, 0.75);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 14px;
+  padding: 1.1rem 1.5rem;
+  max-width: 480px;
+}
+
+.wheel-text-panel p {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--cream);
+  text-align: center;
+}
+
+.wheel-text-panel p + p {
+  margin-top: 0.6rem;
+}
+
+.wheel-text-panel .subtle {
+  color: var(--gold-soft);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
 .wheel {
   width: 220px;
   height: 220px;

@@ -13,20 +13,20 @@ export function WelcomeScreen({ world, isMine, playerName }: Props) {
       <h1 className="display" style={{ fontSize: "2.4rem" }}>
         {world?.emoji ?? "🌍"} {world?.name ?? "Mondo sconosciuto"}
       </h1>
-      <p style={{ color: "var(--text-muted)", maxWidth: 480, textAlign: "center" }}>
-        {world?.tagline ?? ""}
-      </p>
-      <p style={{ maxWidth: 480, textAlign: "center" }}>
-        Una ruota deciderà la prova da affrontare qui: rispondi correttamente entro il tempo
-        limite per guadagnare monete da spendere alla Cittadella.
-      </p>
+      <div className="wheel-text-panel">
+        <p className="subtle">{world?.tagline ?? ""}</p>
+        <p>
+          Una ruota deciderà la prova da affrontare qui: rispondi correttamente entro il tempo
+          limite per guadagnare monete da spendere alla Cittadella.
+        </p>
+      </div>
 
       {isMine ? (
         <button className="btn" onClick={() => socket.emit("board:beginMinigame")}>
           Ok, iniziamo!
         </button>
       ) : (
-        <p style={{ color: "var(--text-muted)" }}>
+        <p style={{ color: "var(--cream)", fontSize: "1rem" }}>
           In attesa che <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong> sia
           pronto…
         </p>

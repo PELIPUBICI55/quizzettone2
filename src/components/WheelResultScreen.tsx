@@ -20,18 +20,20 @@ export function WheelResultScreen({ resultType, isMine, playerName }: Props) {
 
   return (
     <div className="wheel-wrap">
-      <p style={{ color: "var(--text-muted)" }}>La ruota si è fermata su…</p>
+      <p style={{ color: "var(--gold-soft)", fontWeight: 600 }}>La ruota si è fermata su…</p>
       <h1 className="display" style={{ fontSize: "2.6rem" }}>
         {info.emoji} {info.label}
       </h1>
-      <p style={{ maxWidth: 440, textAlign: "center" }}>{info.description}</p>
+      <div className="wheel-text-panel">
+        <p>{info.description}</p>
+      </div>
 
       {isMine ? (
         <button className="btn" onClick={() => socket.emit("board:beginQuiz")}>
           Ok, iniziamo!
         </button>
       ) : (
-        <p style={{ color: "var(--text-muted)" }}>
+        <p style={{ color: "var(--cream)", fontSize: "1rem" }}>
           In attesa che <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong> sia
           pronto…
         </p>
