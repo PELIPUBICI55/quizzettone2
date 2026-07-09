@@ -94,6 +94,20 @@ io.on("connection", (socket) => {
     session?.closeSurprise(loc.playerId, io);
   });
 
+  socket.on("board:submitChoice", ({ optionId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.submitChoice(loc.playerId, optionId, io);
+  });
+
+  socket.on("board:useShieldResponse", ({ use }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.respondShield(loc.playerId, use, io);
+  });
+
   socket.on("board:confirmMove", ({ direction }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

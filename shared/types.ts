@@ -69,8 +69,11 @@ export interface BoardPosition {
 
 export type PawnToken = "hat" | "car" | "dog" | "boot" | "ship" | "wheelbarrow";
 
+export type StatusType = "skipTurn" | "freePack" | "doubleWin" | "halveWin" | "shield";
+
 export interface PlayerStatus {
   id: string;
+  type: StatusType;
   label: string;
   emoji: string;
   description?: string;
@@ -150,6 +153,53 @@ export interface PackOpenedPayload {
   cards: CardDef[];
 }
 
+export type SurpriseEffectCode =
+  | "moveForward"
+  | "moveBackward"
+  | "skipNextTurn"
+  | "rollAgain"
+  | "loseCoins"
+  | "gainCoins"
+  | "stealCoins"
+  | "loseAllCoins"
+  | "discardChosenCard"
+  | "discardRandomCard"
+  | "freePack"
+  | "swapChosen"
+  | "swapRandom"
+  | "nothing"
+  | "returnToCittadella"
+  | "doubleNextWin"
+  | "halveNextWin"
+  | "gainShield";
+
+export interface SurpriseCardDef {
+  id: string;
+  text: string; // il testo narrativo della carta
+  effectLabel: string; // l'etichetta dell'effetto, mostrata sulla carta (es. "AVANZA DI DUE CASELLE")
+  effectCode: SurpriseEffectCode;
+  amount?: number;
+}
+
+export interface SurpriseDrawnPayload {
+  playerId: string;
+  text: string;
+  effectLabel: string;
+}
+
+export type ChoiceKind = "player" | "card";
+
+export interface ChoiceOption {
+  id: string;
+  label: string;
+}
+
+export interface ChooseTargetPayload {
+  kind: ChoiceKind;
+  prompt: string;
+  options: ChoiceOption[];
+}
+
 // Eventi client -> server
 export interface ClientToServerEvents {
   "party:create": (
@@ -175,13 +225,18 @@ export interface ClientToServerEvents {
   "board:beginMinigame": () => void;
   "board:beginQuiz": () => void;
   "board:closeSurprise": () => void;
+  "board:submitChoice": (payload: { optionId: string }) => void;
+  "board:useShieldResponse": (payload: { use: boolean }) => void;
 }
 
 // Eventi server -> client
 export interface ServerToClientEvents {
   "state:update": (state: GameStateSnapshot) => void;
   "board:diceRolled": (payload: { playerId: string; value: number }) => void;
-  "board:surpriseDrawn": (payload: { playerId: string; message: string }) => void;
+  "board:surpriseDrawn": (payload: SurpriseDrawnPayload) => void;
+  "board:chooseTarget": (payload: ChooseTargetPayload) => void;
+  "board:useShieldPrompt": (payload: { message: string }) => void;
+  "board:shieldUsed": (payload: { playerId: string }) => void;
   "world:welcome": (payload: { playerId: string; worldId: string }) => void;
   "wheel:spin": (payload: WheelSpinPayload) => void;
   "wheel:result": (payload: { playerId: string; worldId: string; resultType: MinigameType }) => void;

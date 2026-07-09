@@ -6,23 +6,28 @@ import type {
   GameStateSnapshot,
   OwnedCard,
   PawnToken,
+  PlayerStatus,
   ServerToClientEvents,
+  StatusType,
+  SurpriseCardDef,
 } from "../../shared/types.js";
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
 import { CARD_CATALOG, pickRandomCards } from "../data/cards.js";
 import { PACKS } from "../data/packs.js";
 import { pickRandomQuestion, QuizQuestionInternal } from "../data/questions.js";
+import { drawRandomSurprise } from "../data/surprises.js";
 import { BOARD_EDGES, edgeById, neighborsOf } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
-type SurpriseKind = "coinsGain" | "coinsLoss" | "freeCard" | "extraRoll";
+interface PendingChoice {
+  kind: "stealCoins" | "swapPosition" | "discardCard";
+  amount?: number;
+}
 
-interface SurprisePlan {
-  kind: SurpriseKind;
-  amount: number;
-  cardId?: string;
+interface PendingShieldContext {
   message: string;
+  resolve: (blocked: boolean) => void;
 }
 
 interface InternalPlayer {
@@ -39,11 +44,14 @@ interface InternalPlayer {
   pendingShop: boolean;
   collection: OwnedCard[];
   activeEffects: CardEffectType[];
+  statuses: PlayerStatus[];
   pendingQuestion: QuizQuestionInternal | null;
   pendingWorldId: string | null; // mondo in cui si trova mentre risolve un minigioco
   awaitingWheelStart: boolean; // sulla schermata di benvenuto, in attesa che clicchi "Ok iniziamo"
   awaitingQuizStart: boolean; // sulla schermata di risultato ruota, in attesa che clicchi "Ok iniziamo"
-  pendingSurprise: SurprisePlan | null; // imprevisto pescato ma non ancora applicato
+  pendingSurprise: SurpriseCardDef | null; // imprevisto pescato ma non ancora applicato
+  pendingChoice: PendingChoice | null; // in attesa che scelga un bersaglio (giocatore/carta)
+  pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
 }
 
 const BASE_REWARD = 20;
@@ -59,6 +67,12 @@ let cardInstanceCounter = 0;
 function nextCardInstanceId() {
   cardInstanceCounter += 1;
   return `c${cardInstanceCounter}-${Date.now().toString(36)}`;
+}
+
+let statusIdCounter = 0;
+function nextStatusId() {
+  statusIdCounter += 1;
+  return `st${statusIdCounter}-${Date.now().toString(36)}`;
 }
 
 export class GameSession {
@@ -101,11 +115,14 @@ export class GameSession {
       pendingShop: false,
       collection: [],
       activeEffects: [],
+      statuses: [],
       pendingQuestion: null,
       pendingWorldId: null,
       awaitingWheelStart: false,
       awaitingQuizStart: false,
       pendingSurprise: null,
+      pendingChoice: null,
+      pendingShieldContext: null,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -139,7 +156,14 @@ export class GameSession {
     } else if (player.pendingSurprise) {
       io.to(player.socketId).emit("board:surpriseDrawn", {
         playerId: player.id,
-        message: player.pendingSurprise.message,
+        text: player.pendingSurprise.text,
+        effectLabel: player.pendingSurprise.effectLabel,
+      });
+    } else if (player.pendingChoice) {
+      this.emitChoiceOptions(player, io);
+    } else if (player.pendingShieldContext) {
+      io.to(player.socketId).emit("board:useShieldPrompt", {
+        message: player.pendingShieldContext.message,
       });
     }
   }
@@ -198,6 +222,35 @@ export class GameSession {
     this.currentTurnIndex = (this.currentTurnIndex + 1) % this.turnOrder.length;
   }
 
+  // Avanza il turno e, se il nuovo giocatore di turno ha lo stato "salta
+  // prossimo turno", lo consuma e passa oltre di nuovo (a catena, se per
+  // assurdo ne avesse più di uno).
+  private advanceTurnAndHandleSkips(io: IOServer) {
+    this.advanceTurn();
+    let guard = 0;
+    while (guard <= this.turnOrder.length) {
+      const currentId = this.currentTurnPlayerId();
+      if (!currentId) break;
+      const current = this.players.get(currentId);
+      if (!current) break;
+      const idx = current.statuses.findIndex((s) => s.type === "skipTurn");
+      if (idx === -1) break;
+      current.statuses.splice(idx, 1);
+      this.advanceTurn();
+      guard++;
+    }
+  }
+
+  private addStatus(
+    player: InternalPlayer,
+    type: StatusType,
+    label: string,
+    emoji: string,
+    description?: string
+  ) {
+    player.statuses.push({ id: nextStatusId(), type, label, emoji, description });
+  }
+
   getSnapshot(forPlayerId: string): GameStateSnapshot | null {
     const me = this.players.get(forPlayerId);
     if (!me) return null;
@@ -223,7 +276,7 @@ export class GameSession {
         connected: p.connected,
         token: p.token,
         activeEffects: p.activeEffects,
-        statuses: [],
+        statuses: p.statuses,
         cardCount: p.collection.length,
       })),
       me: {
@@ -234,7 +287,7 @@ export class GameSession {
         connected: me.connected,
         token: me.token,
         activeEffects: me.activeEffects,
-        statuses: [],
+        statuses: me.statuses,
         cardCount: me.collection.length,
         collection: me.collection,
         pendingRoll: me.pendingRoll,
@@ -436,87 +489,363 @@ export class GameSession {
       ? player.boardPosition.nodeId
       : null;
 
-    if (landedNodeId === CITTADELLA_ID) {
-      player.pendingShop = true;
-      // il turno finisce quando lascerà la Cittadella (leaveShop)
-    } else if (landedNodeId) {
-      this.arriveAtWorld(player, landedNodeId, io);
-      // il turno finisce quando la domanda verrà risolta (submitAnswer)
+    if (landedNodeId) {
+      this.resolveArrival(player, landedNodeId, io);
     } else {
       // ancora a metà ponte: controlla se è capitato su una casella imprevisto
       const edge = edgeById(player.boardPosition.edgeId!);
       const progress = player.boardPosition.progress!;
       const isSurprise = !!edge?.surprises.includes(progress);
       if (isSurprise) {
-        const plan = this.rollSurprisePlan(player);
-        player.pendingSurprise = plan;
-        io.emit("board:surpriseDrawn", { playerId: player.id, message: plan.message });
+        const card = drawRandomSurprise();
+        player.pendingSurprise = card;
+        io.emit("board:surpriseDrawn", {
+          playerId: player.id,
+          text: card.text,
+          effectLabel: card.effectLabel,
+        });
         // il turno finisce solo quando chiuderà la schermata (closeSurprise)
       } else {
-        this.advanceTurn();
+        this.advanceTurnAndHandleSkips(io);
       }
     }
 
     this.broadcastState(io);
   }
 
-  // Decide l'effetto casuale della casella "imprevisto" ma NON lo applica
-  // ancora: verrà applicato solo alla chiusura della schermata dedicata.
-  private rollSurprisePlan(player: InternalPlayer): SurprisePlan {
-    const roll = Math.random();
-
-    if (roll < 0.3) {
-      return { kind: "coinsGain", amount: 20, message: "✨ Imprevisto fortunato! +20 monete" };
+  // Gestisce l'arrivo su un nodo (Cittadella o mondo), sia per il movimento
+  // normale col dado sia per gli spostamenti causati da un imprevisto.
+  private resolveArrival(player: InternalPlayer, nodeId: string, io: IOServer) {
+    if (nodeId === CITTADELLA_ID) {
+      player.pendingShop = true;
+      // il turno finisce quando lascerà la Cittadella (leaveShop)
+    } else {
+      this.arriveAtWorld(player, nodeId, io);
+      // il turno finisce quando la domanda verrà risolta (submitAnswer)
     }
-    if (roll < 0.5) {
-      const amount = Math.min(player.coins, 10);
-      return { kind: "coinsLoss", amount, message: `⚡ Imprevisto sfortunato! -${amount} monete` };
-    }
-    if (roll < 0.75) {
-      const [card] = pickRandomCards(1);
-      return {
-        kind: "freeCard",
-        amount: 0,
-        cardId: card.id,
-        message: `🎴 Imprevisto magico! Hai trovato "${card.name}"`,
-      };
-    }
-    return { kind: "extraRoll", amount: 0, message: "🎲 Imprevisto fortunato! Tira di nuovo" };
   }
 
-  // Chiude la schermata dell'imprevisto e SOLO ORA applica davvero l'effetto.
+  // Sposta il giocatore avanti/indietro (steps negativo = indietro) lungo il
+  // ponte su cui si trova attualmente. Se supera un'estremità, arriva al nodo
+  // corrispondente (Cittadella o mondo). Ritorna true se è arrivato a un nodo.
+  private moveAlongCurrentEdge(player: InternalPlayer, steps: number, io: IOServer): boolean {
+    const pos = player.boardPosition;
+    if (pos.onNode || !pos.edgeId) return false;
+    const edge = edgeById(pos.edgeId);
+    if (!edge) return false;
+
+    const newProgress = (pos.progress ?? 1) + steps;
+
+    if (newProgress > edge.length) {
+      const destinationNodeId = edge.a === pos.nodeId ? edge.b : edge.a;
+      player.boardPosition = { nodeId: destinationNodeId, onNode: true };
+      this.resolveArrival(player, destinationNodeId, io);
+      return true;
+    }
+    if (newProgress < 1) {
+      player.boardPosition = { nodeId: pos.nodeId, onNode: true };
+      this.resolveArrival(player, pos.nodeId, io);
+      return true;
+    }
+    player.boardPosition = {
+      nodeId: pos.nodeId,
+      onNode: false,
+      edgeId: edge.id,
+      progress: newProgress,
+    };
+    return false;
+  }
+
+  private swapPositions(a: InternalPlayer, b: InternalPlayer) {
+    const tmp = a.boardPosition;
+    a.boardPosition = b.boardPosition;
+    b.boardPosition = tmp;
+  }
+
+  // Chiude la schermata dell'imprevisto: prima chiede a chi l'ha pescata se
+  // vuole usare uno scudo per bloccarlo del tutto (vale per QUALSIASI
+  // effetto, anche quelli autoinflitti), solo poi applica davvero l'effetto.
   closeSurprise(playerId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player || !player.pendingSurprise) return;
     if (this.currentTurnPlayerId() !== playerId) return;
 
-    const plan = player.pendingSurprise;
+    const card = player.pendingSurprise;
     player.pendingSurprise = null;
 
-    switch (plan.kind) {
-      case "coinsGain":
-        player.coins += plan.amount;
-        break;
-      case "coinsLoss":
-        player.coins -= plan.amount;
-        break;
-      case "freeCard":
-        if (plan.cardId) {
-          player.collection.push({
-            instanceId: nextCardInstanceId(),
-            cardId: plan.cardId,
-            used: false,
-          });
+    this.maybeShield(
+      player,
+      `Stai per subire l'effetto "${card.effectLabel}". Vuoi bloccarlo con uno scudo?`,
+      io,
+      (blocked) => {
+        if (blocked) {
+          this.advanceTurnAndHandleSkips(io);
+          this.broadcastState(io);
+          return;
         }
+        this.executeSurpriseEffect(player, card, io);
+      }
+    );
+  }
+
+  private executeSurpriseEffect(player: InternalPlayer, card: SurpriseCardDef, io: IOServer) {
+    switch (card.effectCode) {
+      case "moveForward": {
+        const arrived = this.moveAlongCurrentEdge(player, card.amount ?? 1, io);
+        if (!arrived) this.advanceTurnAndHandleSkips(io);
         break;
-      case "extraRoll":
-        break; // nessun cambiamento di stato, il turno resta suo
+      }
+      case "moveBackward": {
+        const arrived = this.moveAlongCurrentEdge(player, -(card.amount ?? 1), io);
+        if (!arrived) this.advanceTurnAndHandleSkips(io);
+        break;
+      }
+      case "skipNextTurn":
+        this.addStatus(
+          player,
+          "skipTurn",
+          "Salta prossimo turno",
+          "⏭️",
+          "All'inizio del tuo prossimo turno lo salterai automaticamente."
+        );
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "rollAgain":
+        // nessun avanzamento: può tirare di nuovo subito, il turno resta suo
+        break;
+      case "loseCoins":
+        player.coins = Math.max(0, player.coins - (card.amount ?? 0));
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "gainCoins":
+        player.coins += card.amount ?? 0;
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "stealCoins": {
+        const others = [...this.players.values()].filter((p) => p.id !== player.id && p.connected);
+        if (others.length === 0) {
+          this.advanceTurnAndHandleSkips(io);
+          break;
+        }
+        player.pendingChoice = { kind: "stealCoins", amount: card.amount ?? 0 };
+        this.emitChoiceOptions(player, io);
+        this.broadcastState(io);
+        return;
+      }
+      case "loseAllCoins":
+        player.coins = 0;
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "discardChosenCard": {
+        if (player.collection.length === 0) {
+          this.advanceTurnAndHandleSkips(io);
+          break;
+        }
+        player.pendingChoice = { kind: "discardCard" };
+        this.emitChoiceOptions(player, io);
+        this.broadcastState(io);
+        return;
+      }
+      case "discardRandomCard": {
+        if (player.collection.length > 0) {
+          const idx = Math.floor(Math.random() * player.collection.length);
+          player.collection.splice(idx, 1);
+        }
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      }
+      case "freePack":
+        this.addStatus(
+          player,
+          "freePack",
+          "Pacchetto gratis",
+          "🎁",
+          "Il prossimo pacchetto base comprato alla Cittadella non costa nulla."
+        );
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "swapChosen": {
+        const others = [...this.players.values()].filter((p) => p.id !== player.id && p.connected);
+        if (others.length === 0) {
+          this.advanceTurnAndHandleSkips(io);
+          break;
+        }
+        player.pendingChoice = { kind: "swapPosition" };
+        this.emitChoiceOptions(player, io);
+        this.broadcastState(io);
+        return;
+      }
+      case "swapRandom": {
+        const others = [...this.players.values()].filter((p) => p.id !== player.id && p.connected);
+        if (others.length > 0) {
+          const target = others[Math.floor(Math.random() * others.length)];
+          this.swapWithShieldCheck(player, target, io);
+        }
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      }
+      case "nothing":
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "returnToCittadella":
+        player.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
+        player.pendingShop = true;
+        // il turno finisce quando lascerà la Cittadella (leaveShop)
+        break;
+      case "doubleNextWin":
+        this.addStatus(
+          player,
+          "doubleWin",
+          "Vincita raddoppiata",
+          "✨",
+          "Il prossimo gioco vinto in un mondo pagherà il doppio delle monete."
+        );
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "halveNextWin":
+        this.addStatus(
+          player,
+          "halveWin",
+          "Vincita dimezzata",
+          "📉",
+          "Il prossimo gioco vinto in un mondo pagherà la metà delle monete."
+        );
+        this.advanceTurnAndHandleSkips(io);
+        break;
+      case "gainShield":
+        this.addStatus(
+          player,
+          "shield",
+          "Scudo",
+          "🛡️",
+          "Puoi annullare un effetto subito in futuro. Si consuma dopo l'uso."
+        );
+        this.advanceTurnAndHandleSkips(io);
+        break;
     }
 
-    if (plan.kind !== "extraRoll") {
-      this.advanceTurn();
-    }
     this.broadcastState(io);
+  }
+
+  private emitChoiceOptions(player: InternalPlayer, io: IOServer) {
+    const choice = player.pendingChoice;
+    if (!choice) return;
+
+    if (choice.kind === "stealCoins" || choice.kind === "swapPosition") {
+      const options = [...this.players.values()]
+        .filter((p) => p.id !== player.id && p.connected)
+        .map((p) => ({ id: p.id, label: p.name }));
+      io.to(player.socketId).emit("board:chooseTarget", {
+        kind: "player",
+        prompt:
+          choice.kind === "stealCoins"
+            ? `Scegli a chi rubare ${choice.amount} monete`
+            : "Scegli con chi scambiare posizione",
+        options,
+      });
+    } else if (choice.kind === "discardCard") {
+      const options = player.collection.map((c) => {
+        const def = CARD_CATALOG.find((cd) => cd.id === c.cardId);
+        return { id: c.instanceId, label: def?.name ?? "Carta sconosciuta" };
+      });
+      io.to(player.socketId).emit("board:chooseTarget", {
+        kind: "card",
+        prompt: "Scegli quale figurina scartare",
+        options,
+      });
+    }
+  }
+
+  submitChoice(playerId: string, optionId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingChoice) return;
+    if (this.currentTurnPlayerId() !== playerId) return;
+
+    const choice = player.pendingChoice;
+    player.pendingChoice = null;
+
+    if (choice.kind === "stealCoins") {
+      const target = this.players.get(optionId);
+      if (target) this.stealWithShieldCheck(player, target, choice.amount ?? 0, io);
+    } else if (choice.kind === "swapPosition") {
+      const target = this.players.get(optionId);
+      if (target) this.swapWithShieldCheck(player, target, io);
+    } else if (choice.kind === "discardCard") {
+      const idx = player.collection.findIndex((c) => c.instanceId === optionId);
+      if (idx !== -1) player.collection.splice(idx, 1);
+    }
+
+    this.advanceTurnAndHandleSkips(io);
+    this.broadcastState(io);
+  }
+
+  // Se il bersaglio ha uno scudo attivo, gli chiede se vuole usarlo prima di
+  // applicare davvero il furto; altrimenti lo applica subito.
+  private stealWithShieldCheck(
+    source: InternalPlayer,
+    target: InternalPlayer,
+    amount: number,
+    io: IOServer
+  ) {
+    this.maybeShield(
+      target,
+      `${source.name} sta cercando di rubarti ${amount} monete! Vuoi bloccarlo con uno scudo?`,
+      io,
+      (blocked) => {
+        if (!blocked) {
+          const actual = Math.min(target.coins, amount);
+          target.coins -= actual;
+          source.coins += actual;
+        }
+        this.broadcastState(io);
+      }
+    );
+  }
+
+  // Stessa idea per lo scambio di posizione: il bersaglio può bloccarlo con
+  // uno scudo prima che avvenga davvero.
+  private swapWithShieldCheck(player: InternalPlayer, target: InternalPlayer, io: IOServer) {
+    this.maybeShield(
+      target,
+      `${player.name} vuole scambiarsi di posizione con te! Vuoi bloccarlo con uno scudo?`,
+      io,
+      (blocked) => {
+        if (!blocked) this.swapPositions(player, target);
+        this.broadcastState(io);
+      }
+    );
+  }
+
+  // Helper generico: se il giocatore ha uno scudo attivo, gli chiede se vuole
+  // usarlo (consumandone uno) per annullare l'effetto in arrivo; altrimenti
+  // procede subito. onResolve riceve true se l'effetto è stato bloccato.
+  private maybeShield(
+    player: InternalPlayer,
+    message: string,
+    io: IOServer,
+    onResolve: (blocked: boolean) => void
+  ) {
+    const hasShield = player.statuses.some((s) => s.type === "shield");
+    if (!hasShield) {
+      onResolve(false);
+      return;
+    }
+    player.pendingShieldContext = { message, resolve: onResolve };
+    io.to(player.socketId).emit("board:useShieldPrompt", { message });
+  }
+
+  respondShield(playerId: string, useShield: boolean, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingShieldContext) return;
+    const ctx = player.pendingShieldContext;
+    player.pendingShieldContext = null;
+
+    if (useShield) {
+      const idx = player.statuses.findIndex((s) => s.type === "shield");
+      if (idx !== -1) player.statuses.splice(idx, 1);
+      io.emit("board:shieldUsed", { playerId: player.id });
+    }
+    ctx.resolve(useShield);
   }
 
   leaveShop(playerId: string, io: IOServer) {
@@ -530,7 +859,7 @@ export class GameSession {
     }
     if (!player.pendingShop) return;
     player.pendingShop = false;
-    this.advanceTurn();
+    this.advanceTurnAndHandleSkips(io);
     this.broadcastState(io);
   }
 
@@ -658,6 +987,18 @@ export class GameSession {
       (e) => e !== "secondChance" && e !== "doubleCoins"
     );
 
+    // status da imprevisto che raddoppiano/dimezzano la vincita di questo gioco
+    const doubleIdx = player.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      coinsAwarded *= 2;
+      player.statuses.splice(doubleIdx, 1);
+    }
+    const halveIdx = player.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      coinsAwarded = Math.floor(coinsAwarded / 2);
+      player.statuses.splice(halveIdx, 1);
+    }
+
     player.coins += coinsAwarded;
     player.pendingWorldId = null;
 
@@ -669,7 +1010,7 @@ export class GameSession {
     });
 
     // la prova è conclusa: il turno passa al giocatore successivo
-    this.advanceTurn();
+    this.advanceTurnAndHandleSkips(io);
     this.broadcastState(io);
   }
 
@@ -711,14 +1052,20 @@ export class GameSession {
       });
       return;
     }
-    if (player.coins < pack.cost) {
+
+    const freePackIdx = player.statuses.findIndex((s) => s.type === "freePack");
+    const usesFreePack = freePackIdx !== -1 && pack.id === "pack-base";
+    const cost = usesFreePack ? 0 : pack.cost;
+
+    if (player.coins < cost) {
       io.to(player.socketId).emit("error:message", {
         message: "Non hai abbastanza monete per questo pacchetto.",
       });
       return;
     }
 
-    player.coins -= pack.cost;
+    player.coins -= cost;
+    if (usesFreePack) player.statuses.splice(freePackIdx, 1);
     const cards = pickRandomCards(pack.cardCount);
     player.collection.push(
       ...cards.map((c) => ({

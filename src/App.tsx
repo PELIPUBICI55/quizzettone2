@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  ChooseTargetPayload,
   GameStateSnapshot,
   MinigameType,
   PackOpenedPayload,
@@ -13,6 +14,8 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Wheel } from "./components/Wheel";
 import { WheelResultScreen } from "./components/WheelResultScreen";
 import { SurpriseScreen } from "./components/SurpriseScreen";
+import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
+import { ShieldPromptScreen } from "./components/ShieldPromptScreen";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { QuizSpectatorView } from "./components/QuizSpectatorView";
 import { Cittadella } from "./screens/Cittadella";
@@ -38,7 +41,11 @@ export default function App() {
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
-  const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; message: string } | null>(null);
+  const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; text: string; effectLabel: string } | null>(
+    null
+  );
+  const [chooseTargetInfo, setChooseTargetInfo] = useState<ChooseTargetPayload | null>(null);
+  const [shieldPromptInfo, setShieldPromptInfo] = useState<{ message: string } | null>(null);
   const [showTurnOrder, setShowTurnOrder] = useState(false);
   const prevPhase = useRef<"lobby" | "playing" | null>(null);
 
@@ -75,7 +82,13 @@ export default function App() {
     };
     const onResult = (p: QuizResultPayload) => setQuizResult(p);
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
-    const onSurpriseDrawn = (p: { playerId: string; message: string }) => setSurpriseInfo(p);
+    const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
+      setSurpriseInfo(p);
+      setChooseTargetInfo(null);
+    };
+    const onChooseTarget = (p: ChooseTargetPayload) => setChooseTargetInfo(p);
+    const onShieldPrompt = (p: { message: string }) => setShieldPromptInfo(p);
+    const onShieldUsed = () => setShieldPromptInfo(null);
     const onError = (p: { message: string }) => setError(p.message);
     const onKicked = () => {
       setState(null);
@@ -93,6 +106,9 @@ export default function App() {
     socket.on("quiz:result", onResult);
     socket.on("shop:packOpened", onPack);
     socket.on("board:surpriseDrawn", onSurpriseDrawn);
+    socket.on("board:chooseTarget", onChooseTarget);
+    socket.on("board:useShieldPrompt", onShieldPrompt);
+    socket.on("board:shieldUsed", onShieldUsed);
     socket.on("error:message", onError);
     socket.on("party:kicked", onKicked);
     socket.on("disconnect", onDisconnect);
@@ -106,6 +122,9 @@ export default function App() {
       socket.off("quiz:result", onResult);
       socket.off("shop:packOpened", onPack);
       socket.off("board:surpriseDrawn", onSurpriseDrawn);
+      socket.off("board:chooseTarget", onChooseTarget);
+      socket.off("board:useShieldPrompt", onShieldPrompt);
+      socket.off("board:shieldUsed", onShieldUsed);
       socket.off("error:message", onError);
       socket.off("party:kicked", onKicked);
       socket.off("disconnect", onDisconnect);
@@ -174,6 +193,16 @@ export default function App() {
     setSurpriseInfo(null);
   };
 
+  const submitChoice = (optionId: string) => {
+    socket.emit("board:submitChoice", { optionId });
+    setChooseTargetInfo(null);
+  };
+
+  const respondShield = (use: boolean) => {
+    socket.emit("board:useShieldResponse", { use });
+    setShieldPromptInfo(null);
+  };
+
   const currentWorld = state.worlds.find(
     (w) => w.id === (welcomeInfo?.worldId ?? wheelInfo?.worldId)
   );
@@ -200,7 +229,9 @@ export default function App() {
       <div className="main-area">
         {error && <div className="error-banner">{error}</div>}
 
-        {welcomeInfo ? (
+        {shieldPromptInfo ? (
+          <ShieldPromptScreen message={shieldPromptInfo.message} onRespond={respondShield} />
+        ) : welcomeInfo ? (
           <WelcomeScreen
             world={currentWorld}
             isMine={welcomeInfo.playerId === state.me.id}
@@ -221,11 +252,14 @@ export default function App() {
           />
         ) : surpriseInfo ? (
           <SurpriseScreen
-            message={surpriseInfo.message}
+            text={surpriseInfo.text}
+            effectLabel={surpriseInfo.effectLabel}
             isMine={surpriseInfo.playerId === state.me.id}
             playerName={surprisePlayer?.name ?? "?"}
             onClose={closeSurprise}
           />
+        ) : chooseTargetInfo ? (
+          <ChooseTargetScreen payload={chooseTargetInfo} onSelect={submitChoice} />
         ) : quizPayload ? (
           quizPayload.playerId === state.me.id ? (
             <QuizMinigame

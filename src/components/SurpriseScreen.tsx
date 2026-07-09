@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
 
 interface Props {
-  message: string;
+  text: string;
+  effectLabel: string;
   isMine: boolean;
   playerName: string;
   onClose: () => void;
 }
 
-export function SurpriseScreen({ message, isMine, playerName, onClose }: Props) {
+export function SurpriseScreen({ text, effectLabel, isMine, playerName, onClose }: Props) {
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     setRevealed(false);
     const t = setTimeout(() => setRevealed(true), 900);
     return () => clearTimeout(t);
-  }, [message]);
+  }, [text, effectLabel]);
 
   return (
     <div className="wheel-wrap">
@@ -34,7 +35,10 @@ export function SurpriseScreen({ message, isMine, playerName, onClose }: Props) 
       {revealed && (
         <>
           <div className="wheel-text-panel">
-            <p>{message}</p>
+            <p>{text}</p>
+            <p className="subtle" style={{ marginTop: "0.6rem" }}>
+              {effectLabel}
+            </p>
           </div>
           {isMine ? (
             <button className="btn" onClick={onClose}>
