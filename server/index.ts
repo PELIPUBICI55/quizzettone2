@@ -43,6 +43,13 @@ io.on("connection", (socket) => {
     session.resendPendingQuestion(player.id, io);
   });
 
+  socket.on("party:chooseToken", ({ token }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.chooseToken(loc.playerId, token, io);
+  });
+
   socket.on("party:start", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

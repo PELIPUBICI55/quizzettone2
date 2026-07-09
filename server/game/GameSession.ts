@@ -5,6 +5,7 @@ import type {
   ClientToServerEvents,
   GameStateSnapshot,
   OwnedCard,
+  PawnToken,
   ServerToClientEvents,
 } from "../../shared/types.js";
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
@@ -20,6 +21,7 @@ interface InternalPlayer {
   socketId: string;
   clientId: string;
   connected: boolean;
+  token: PawnToken | null;
   name: string;
   isHost: boolean;
   coins: number;
@@ -78,6 +80,7 @@ export class GameSession {
       socketId,
       clientId,
       connected: true,
+      token: null,
       name: name.trim().slice(0, 20) || "Giocatore",
       isHost,
       coins: 50, // gruzzoletto iniziale
@@ -179,6 +182,7 @@ export class GameSession {
         coins: p.coins,
         isHost: p.isHost,
         connected: p.connected,
+        token: p.token,
         cardCount: p.collection.length,
       })),
       me: {
@@ -187,6 +191,7 @@ export class GameSession {
         coins: me.coins,
         isHost: me.isHost,
         connected: me.connected,
+        token: me.token,
         cardCount: me.collection.length,
         collection: me.collection,
         activeEffects: me.activeEffects,
@@ -219,6 +224,12 @@ export class GameSession {
       });
       return;
     }
+    if ([...this.players.values()].some((p) => p.token === null)) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Tutti i giocatori devono scegliere una pedina prima di iniziare.",
+      });
+      return;
+    }
 
     // mescola casualmente l'ordine dei turni (Fisher-Yates)
     for (let i = this.turnOrder.length - 1; i > 0; i--) {
@@ -227,6 +238,28 @@ export class GameSession {
     }
     this.currentTurnIndex = 0;
     this.phase = "playing";
+    this.broadcastState(io);
+  }
+
+  chooseToken(playerId: string, token: PawnToken, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.phase !== "lobby") {
+      io.to(player.socketId).emit("error:message", {
+        message: "Non puoi cambiare pedina a partita iniziata.",
+      });
+      return;
+    }
+    const takenByOther = [...this.players.values()].some(
+      (p) => p.id !== playerId && p.token === token
+    );
+    if (takenByOther) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Questa pedina è già stata scelta da un altro giocatore.",
+      });
+      return;
+    }
+    player.token = token;
     this.broadcastState(io);
   }
 

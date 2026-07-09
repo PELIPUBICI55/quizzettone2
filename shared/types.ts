@@ -67,12 +67,15 @@ export interface BoardPosition {
   progress?: number; // caselle percorse sul ponte (1..length-1)
 }
 
+export type PawnToken = "hat" | "car" | "dog" | "boot" | "ship" | "wheelbarrow";
+
 export interface PlayerSummary {
   id: string;
   name: string;
   coins: number;
   isHost: boolean;
   connected: boolean;
+  token: PawnToken | null;
   cardCount: number; // quante carte possiede in totale (visibile agli altri, non quali)
 }
 
@@ -151,6 +154,7 @@ export interface ClientToServerEvents {
   ) => void;
   "party:start": () => void;
   "party:kick": (payload: { playerId: string }) => void;
+  "party:chooseToken": (payload: { token: PawnToken }) => void;
   "board:roll": () => void;
   "board:confirmMove": (payload: { direction?: string }) => void;
   "quiz:answer": (payload: {

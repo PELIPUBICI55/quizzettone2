@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Line, Billboard, Text } from "@react-three/drei";
 import type * as THREE from "three";
-import type { GameStateSnapshot, WorldDef } from "../../shared/types";
+import type { GameStateSnapshot, PawnToken as PawnTokenId, WorldDef } from "../../shared/types";
 
 const RADIUS = 13;
 
@@ -75,7 +75,7 @@ function FloatingIsland({
   size: number;
   seed: number;
   isCenter?: boolean;
-  pawns?: { key: string; color: string; isCurrent: boolean; name: string; angle: number; offsetR: number }[];
+  pawns?: { key: string; color: string; isCurrent: boolean; name: string; token: PawnTokenId; angle: number; offsetR: number }[];
   highlighted?: boolean;
   onSelect?: () => void;
   name: string;
@@ -215,6 +215,7 @@ function FloatingIsland({
           color={p.color}
           isCurrent={p.isCurrent}
           name={p.name}
+          token={p.token}
         />
       ))}
 
@@ -401,31 +402,161 @@ function TargetMarker({
   );
 }
 
+function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color: string; isCurrent: boolean }) {
+  const glow = isCurrent ? color : "#000000";
+  const glowI = isCurrent ? 0.6 : 0;
+
+  switch (token) {
+    case "hat":
+      return (
+        <group>
+          <mesh position={[0, 0.08, 0]} castShadow>
+            <cylinderGeometry args={[0.34, 0.34, 0.05, 20]} />
+            <meshStandardMaterial color="#1a1a1a" emissive={glow} emissiveIntensity={glowI} />
+          </mesh>
+          <mesh position={[0, 0.32, 0]} castShadow>
+            <cylinderGeometry args={[0.2, 0.22, 0.42, 20]} />
+            <meshStandardMaterial color="#1a1a1a" emissive={glow} emissiveIntensity={glowI} />
+          </mesh>
+          <mesh position={[0, 0.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.21, 0.03, 8, 20]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        </group>
+      );
+
+    case "car":
+      return (
+        <group>
+          <mesh position={[0, 0.26, 0]} castShadow>
+            <boxGeometry args={[0.56, 0.16, 0.26]} />
+            <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
+          </mesh>
+          <mesh position={[-0.03, 0.41, 0]} castShadow>
+            <boxGeometry args={[0.3, 0.14, 0.22]} />
+            <meshStandardMaterial color={color} flatShading />
+          </mesh>
+          {[0.18, -0.18].flatMap((x) =>
+            [0.14, -0.14].map((z) => (
+              <mesh key={`${x}-${z}`} position={[x, 0.12, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+                <cylinderGeometry args={[0.09, 0.09, 0.07, 14]} />
+                <meshStandardMaterial color="#1a1a1a" />
+              </mesh>
+            ))
+          )}
+        </group>
+      );
+
+    case "dog":
+      return (
+        <group>
+          <mesh position={[0, 0.28, 0]} castShadow>
+            <boxGeometry args={[0.4, 0.16, 0.16]} />
+            <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
+          </mesh>
+          <mesh position={[0.24, 0.35, 0]} castShadow>
+            <sphereGeometry args={[0.13, 12, 12]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          <mesh position={[0.35, 0.32, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
+            <coneGeometry args={[0.06, 0.14, 8]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          {[0.16, -0.16].map((z) => (
+            <mesh key={z} position={[0.28, 0.44, z]} castShadow>
+              <coneGeometry args={[0.045, 0.12, 6]} />
+              <meshStandardMaterial color={color} flatShading />
+            </mesh>
+          ))}
+          {[
+            [0.15, 0.1],
+            [0.15, -0.1],
+            [-0.15, 0.1],
+            [-0.15, -0.1],
+          ].map(([x, z]) => (
+            <mesh key={`${x}-${z}`} position={[x, 0.12, z]} castShadow>
+              <cylinderGeometry args={[0.035, 0.035, 0.2, 8]} />
+              <meshStandardMaterial color={color} />
+            </mesh>
+          ))}
+        </group>
+      );
+
+    case "boot":
+      return (
+        <group>
+          <mesh position={[0.04, 0.07, 0]} castShadow>
+            <boxGeometry args={[0.44, 0.08, 0.2]} />
+            <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
+          </mesh>
+          <mesh position={[-0.11, 0.28, 0]} castShadow>
+            <boxGeometry args={[0.18, 0.38, 0.17]} />
+            <meshStandardMaterial color={color} flatShading />
+          </mesh>
+          <mesh position={[0.2, 0.13, 0]} castShadow>
+            <boxGeometry args={[0.14, 0.1, 0.18]} />
+            <meshStandardMaterial color={color} flatShading />
+          </mesh>
+        </group>
+      );
+
+    case "ship":
+      return (
+        <group>
+          <mesh position={[0, 0.22, 0]} castShadow>
+            <boxGeometry args={[0.58, 0.14, 0.22]} />
+            <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
+          </mesh>
+          <mesh position={[0, 0.5, 0]} castShadow>
+            <cylinderGeometry args={[0.02, 0.02, 0.42, 8]} />
+            <meshStandardMaterial color="#5a3d1f" />
+          </mesh>
+          <mesh position={[0.09, 0.5, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <coneGeometry args={[0.16, 0.3, 4]} />
+            <meshStandardMaterial color="#f2ecff" flatShading />
+          </mesh>
+        </group>
+      );
+
+    case "wheelbarrow":
+    default:
+      return (
+        <group>
+          <mesh position={[-0.05, 0.32, 0]} rotation={[-0.15, 0, 0]} castShadow>
+            <boxGeometry args={[0.38, 0.14, 0.26]} />
+            <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
+          </mesh>
+          <mesh position={[0.22, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <torusGeometry args={[0.1, 0.03, 8, 16]} />
+            <meshStandardMaterial color="#1a1a1a" />
+          </mesh>
+          {[0.09, -0.09].map((z) => (
+            <mesh key={z} position={[-0.32, 0.28, z]} rotation={[0, 0, -0.2]} castShadow>
+              <cylinderGeometry args={[0.02, 0.02, 0.36, 6]} />
+              <meshStandardMaterial color="#5a3d1f" />
+            </mesh>
+          ))}
+        </group>
+      );
+  }
+}
+
 function PawnToken({
   position,
   color,
   isCurrent,
   name,
+  token,
 }: {
   position: [number, number, number];
   color: string;
   isCurrent: boolean;
   name: string;
+  token: PawnTokenId;
 }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.55, 0]} castShadow>
-        <sphereGeometry args={[0.4, 16, 16]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={isCurrent ? color : "#000000"}
-          emissiveIntensity={isCurrent ? 0.7 : 0}
-        />
-      </mesh>
-      <mesh position={[0, 0.15, 0]} castShadow>
-        <coneGeometry args={[0.35, 0.5, 12]} />
-        <meshStandardMaterial color={color} roughness={0.5} />
-      </mesh>
+      <MonopolyToken token={token} color={color} isCurrent={isCurrent} />
       <Billboard position={[0, 1.05, 0]}>
         <Text
           fontSize={0.32}
@@ -481,6 +612,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
       color: PLAYER_COLORS[colorIdx],
       isCurrent: playerId === state.currentTurnPlayerId,
       name: player?.name ?? "?",
+      token: player?.token ?? "hat",
       angle,
       offsetR,
     };
@@ -625,6 +757,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
             color={descriptor.color}
             isCurrent={descriptor.isCurrent}
             name={descriptor.name}
+            token={descriptor.token}
           />
         ))}
 
