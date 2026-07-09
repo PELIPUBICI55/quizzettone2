@@ -12,6 +12,7 @@ import { JoinScreen } from "./components/JoinScreen";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Wheel } from "./components/Wheel";
 import { WheelResultScreen } from "./components/WheelResultScreen";
+import { SurpriseScreen } from "./components/SurpriseScreen";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { QuizSpectatorView } from "./components/QuizSpectatorView";
 import { Cittadella } from "./screens/Cittadella";
@@ -36,7 +37,7 @@ export default function App() {
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
-  const [surpriseMessage, setSurpriseMessage] = useState<string | null>(null);
+  const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; message: string } | null>(null);
   const [showTurnOrder, setShowTurnOrder] = useState(false);
   const prevPhase = useRef<"lobby" | "playing" | null>(null);
 
@@ -73,7 +74,7 @@ export default function App() {
     };
     const onResult = (p: QuizResultPayload) => setQuizResult(p);
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
-    const onSurprise = (p: { playerId: string; message: string }) => setSurpriseMessage(p.message);
+    const onSurpriseDrawn = (p: { playerId: string; message: string }) => setSurpriseInfo(p);
     const onError = (p: { message: string }) => setError(p.message);
     const onKicked = () => {
       setState(null);
@@ -90,7 +91,7 @@ export default function App() {
     socket.on("quiz:question", onQuestion);
     socket.on("quiz:result", onResult);
     socket.on("shop:packOpened", onPack);
-    socket.on("board:surprise", onSurprise);
+    socket.on("board:surpriseDrawn", onSurpriseDrawn);
     socket.on("error:message", onError);
     socket.on("party:kicked", onKicked);
     socket.on("disconnect", onDisconnect);
@@ -103,7 +104,7 @@ export default function App() {
       socket.off("quiz:question", onQuestion);
       socket.off("quiz:result", onResult);
       socket.off("shop:packOpened", onPack);
-      socket.off("board:surprise", onSurprise);
+      socket.off("board:surpriseDrawn", onSurpriseDrawn);
       socket.off("error:message", onError);
       socket.off("party:kicked", onKicked);
       socket.off("disconnect", onDisconnect);
@@ -115,16 +116,11 @@ export default function App() {
     setWelcomeInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setWheelInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setWheelResultInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setSurpriseInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizPayload((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizResult((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
-
-  useEffect(() => {
-    if (!surpriseMessage) return;
-    const t = setTimeout(() => setSurpriseMessage(null), 3500);
-    return () => clearTimeout(t);
-  }, [surpriseMessage]);
 
   useEffect(() => {
     if (!error) return;
@@ -172,12 +168,18 @@ export default function App() {
     setWheelInfo(null);
   };
 
+  const closeSurprise = () => {
+    socket.emit("board:closeSurprise");
+    setSurpriseInfo(null);
+  };
+
   const currentWorld = state.worlds.find(
     (w) => w.id === (welcomeInfo?.worldId ?? wheelInfo?.worldId)
   );
   const welcomePlayer = state.players.find((p) => p.id === welcomeInfo?.playerId);
   const wheelPlayer = state.players.find((p) => p.id === wheelInfo?.playerId);
   const wheelResultPlayer = state.players.find((p) => p.id === wheelResultInfo?.playerId);
+  const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
   return (
@@ -215,6 +217,13 @@ export default function App() {
             isMine={wheelResultInfo.playerId === state.me.id}
             playerName={wheelResultPlayer?.name ?? "?"}
           />
+        ) : surpriseInfo ? (
+          <SurpriseScreen
+            message={surpriseInfo.message}
+            isMine={surpriseInfo.playerId === state.me.id}
+            playerName={surprisePlayer?.name ?? "?"}
+            onClose={closeSurprise}
+          />
         ) : quizPayload ? (
           quizPayload.playerId === state.me.id ? (
             <QuizMinigame
@@ -232,12 +241,6 @@ export default function App() {
           state.me.pendingShop ? <Cittadella state={state} /> : <Board state={state} />
         )}
       </div>
-
-      {surpriseMessage && (
-        <div className="surprise-banner">
-          <span>{surpriseMessage}</span>
-        </div>
-      )}
 
       {packOpened && (
         <div className="reveal-overlay" onClick={() => setPackOpened(null)}>

@@ -87,6 +87,13 @@ io.on("connection", (socket) => {
     session?.beginQuiz(loc.playerId, io);
   });
 
+  socket.on("board:closeSurprise", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.closeSurprise(loc.playerId, io);
+  });
+
   socket.on("board:confirmMove", ({ direction }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

@@ -166,13 +166,14 @@ export interface ClientToServerEvents {
   "shop:leave": () => void;
   "board:beginMinigame": () => void;
   "board:beginQuiz": () => void;
+  "board:closeSurprise": () => void;
 }
 
 // Eventi server -> client
 export interface ServerToClientEvents {
   "state:update": (state: GameStateSnapshot) => void;
   "board:diceRolled": (payload: { playerId: string; value: number }) => void;
-  "board:surprise": (payload: { playerId: string; message: string }) => void;
+  "board:surpriseDrawn": (payload: { playerId: string; message: string }) => void;
   "world:welcome": (payload: { playerId: string; worldId: string }) => void;
   "wheel:spin": (payload: WheelSpinPayload) => void;
   "wheel:result": (payload: { playerId: string; worldId: string; resultType: MinigameType }) => void;

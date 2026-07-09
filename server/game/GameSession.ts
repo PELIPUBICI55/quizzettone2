@@ -16,6 +16,15 @@ import { BOARD_EDGES, edgeById, neighborsOf } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
+type SurpriseKind = "coinsGain" | "coinsLoss" | "freeCard" | "extraRoll";
+
+interface SurprisePlan {
+  kind: SurpriseKind;
+  amount: number;
+  cardId?: string;
+  message: string;
+}
+
 interface InternalPlayer {
   id: string;
   socketId: string;
@@ -34,6 +43,7 @@ interface InternalPlayer {
   pendingWorldId: string | null; // mondo in cui si trova mentre risolve un minigioco
   awaitingWheelStart: boolean; // sulla schermata di benvenuto, in attesa che clicchi "Ok iniziamo"
   awaitingQuizStart: boolean; // sulla schermata di risultato ruota, in attesa che clicchi "Ok iniziamo"
+  pendingSurprise: SurprisePlan | null; // imprevisto pescato ma non ancora applicato
 }
 
 const BASE_REWARD = 20;
@@ -95,6 +105,7 @@ export class GameSession {
       pendingWorldId: null,
       awaitingWheelStart: false,
       awaitingQuizStart: false,
+      pendingSurprise: null,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -124,6 +135,11 @@ export class GameSession {
         playerId: player.id,
         worldId: player.pendingWorldId,
         resultType: "quiz",
+      });
+    } else if (player.pendingSurprise) {
+      io.to(player.socketId).emit("board:surpriseDrawn", {
+        playerId: player.id,
+        message: player.pendingSurprise.message,
       });
     }
   }
@@ -428,43 +444,76 @@ export class GameSession {
       const edge = edgeById(player.boardPosition.edgeId!);
       const progress = player.boardPosition.progress!;
       const isSurprise = !!edge?.surprises.includes(progress);
-      const advance = isSurprise ? this.triggerSurprise(player, io) : true;
-      if (advance) this.advanceTurn();
+      if (isSurprise) {
+        const plan = this.rollSurprisePlan(player);
+        player.pendingSurprise = plan;
+        io.emit("board:surpriseDrawn", { playerId: player.id, message: plan.message });
+        // il turno finisce solo quando chiuderà la schermata (closeSurprise)
+      } else {
+        this.advanceTurn();
+      }
     }
 
     this.broadcastState(io);
   }
 
-  // Applica un effetto casuale quando un giocatore atterra su una casella
-  // "imprevisto". Ritorna false se il turno NON deve avanzare (es. tiro extra).
-  private triggerSurprise(player: InternalPlayer, io: IOServer): boolean {
+  // Decide l'effetto casuale della casella "imprevisto" ma NON lo applica
+  // ancora: verrà applicato solo alla chiusura della schermata dedicata.
+  private rollSurprisePlan(player: InternalPlayer): SurprisePlan {
     const roll = Math.random();
-    let message: string;
-    let advance = true;
 
     if (roll < 0.3) {
-      const amount = 20;
-      player.coins += amount;
-      message = `✨ Imprevisto fortunato! +${amount} monete`;
-    } else if (roll < 0.5) {
+      return { kind: "coinsGain", amount: 20, message: "✨ Imprevisto fortunato! +20 monete" };
+    }
+    if (roll < 0.5) {
       const amount = Math.min(player.coins, 10);
-      player.coins -= amount;
-      message = `⚡ Imprevisto sfortunato! -${amount} monete`;
-    } else if (roll < 0.75) {
+      return { kind: "coinsLoss", amount, message: `⚡ Imprevisto sfortunato! -${amount} monete` };
+    }
+    if (roll < 0.75) {
       const [card] = pickRandomCards(1);
-      player.collection.push({
-        instanceId: nextCardInstanceId(),
+      return {
+        kind: "freeCard",
+        amount: 0,
         cardId: card.id,
-        used: false,
-      });
-      message = `🎴 Imprevisto magico! Hai trovato "${card.name}"`;
-    } else {
-      advance = false;
-      message = "🎲 Imprevisto fortunato! Tira di nuovo";
+        message: `🎴 Imprevisto magico! Hai trovato "${card.name}"`,
+      };
+    }
+    return { kind: "extraRoll", amount: 0, message: "🎲 Imprevisto fortunato! Tira di nuovo" };
+  }
+
+  // Chiude la schermata dell'imprevisto e SOLO ORA applica davvero l'effetto.
+  closeSurprise(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingSurprise) return;
+    if (this.currentTurnPlayerId() !== playerId) return;
+
+    const plan = player.pendingSurprise;
+    player.pendingSurprise = null;
+
+    switch (plan.kind) {
+      case "coinsGain":
+        player.coins += plan.amount;
+        break;
+      case "coinsLoss":
+        player.coins -= plan.amount;
+        break;
+      case "freeCard":
+        if (plan.cardId) {
+          player.collection.push({
+            instanceId: nextCardInstanceId(),
+            cardId: plan.cardId,
+            used: false,
+          });
+        }
+        break;
+      case "extraRoll":
+        break; // nessun cambiamento di stato, il turno resta suo
     }
 
-    io.emit("board:surprise", { playerId: player.id, message });
-    return advance;
+    if (plan.kind !== "extraRoll") {
+      this.advanceTurn();
+    }
+    this.broadcastState(io);
   }
 
   leaveShop(playerId: string, io: IOServer) {

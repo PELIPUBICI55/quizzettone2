@@ -377,6 +377,49 @@ input {
   font-size: 0.95rem;
 }
 
+.surprise-deck-area {
+  position: relative;
+  width: 140px;
+  height: 190px;
+}
+
+.surprise-deck {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2f9e6f, #123d2b);
+  border: 3px solid #baffd9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.surprise-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #f2ecff, #cbb8ff);
+  border: 3px solid #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(10px) rotateY(180deg) scale(0.75);
+  transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s ease;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
+.surprise-card.revealed {
+  opacity: 1;
+  transform: translateY(-46px) rotateY(0deg) scale(1.08);
+}
+
+.surprise-card-emoji {
+  font-size: 3rem;
+}
+
 .wheel {
   width: 220px;
   height: 220px;
