@@ -69,6 +69,13 @@ export interface BoardPosition {
 
 export type PawnToken = "hat" | "car" | "dog" | "boot" | "ship" | "wheelbarrow";
 
+export interface PlayerStatus {
+  id: string;
+  label: string;
+  emoji: string;
+  description?: string;
+}
+
 export interface PlayerSummary {
   id: string;
   name: string;
@@ -76,12 +83,13 @@ export interface PlayerSummary {
   isHost: boolean;
   connected: boolean;
   token: PawnToken | null;
+  activeEffects: CardEffectType[]; // effetti carta già armati, pronti da usare
+  statuses: PlayerStatus[]; // impalcatura generica per i futuri "status" di gioco
   cardCount: number; // quante carte possiede in totale (visibile agli altri, non quali)
 }
 
 export interface MyState extends PlayerSummary {
   collection: OwnedCard[]; // ogni copia posseduta, con il suo stato used/non used
-  activeEffects: CardEffectType[]; // effetti attivati e in attesa di essere consumati
   pendingRoll: number | null; // numero uscito, in attesa che tu confermi lo spostamento
   pendingShop: boolean; // sei atterrato sulla Cittadella e stai visitando il mercante
 }

@@ -22,6 +22,7 @@ import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
 import { CollectionMenu } from "./components/CollectionMenu";
 import { PartyMenu } from "./components/PartyMenu";
+import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
 
 export default function App() {
@@ -192,6 +193,7 @@ export default function App() {
         </span>
         <span className="coin-pill">🪙 {state.me.coins}</span>
         <PartyMenu state={state} />
+        <StatusMenu state={state} />
         <CollectionMenu state={state} />
       </div>
 
