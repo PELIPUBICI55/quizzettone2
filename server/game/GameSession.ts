@@ -83,7 +83,7 @@ export class GameSession {
       token: null,
       name: name.trim().slice(0, 20) || "Giocatore",
       isHost,
-      coins: 50, // gruzzoletto iniziale
+      coins: 0,
       boardPosition: { nodeId: CITTADELLA_ID, onNode: true },
       pendingRoll: null,
       pendingShop: false,

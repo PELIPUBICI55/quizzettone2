@@ -1,4 +1,4 @@
-import type { CardDef, CardEffectDef } from "../../shared/types.js";
+import type { CardDef, CardEffectDef, CardRarity } from "../../shared/types.js";
 import { WORLDS } from "./worlds.js";
 
 const EFFECTS: CardEffectDef[] = [
@@ -9,35 +9,53 @@ const EFFECTS: CardEffectDef[] = [
   { type: "skipQuestion", label: "Salta la domanda e pescane un'altra" },
 ];
 
-const RARITY_CYCLE = ["comune", "comune", "rara", "epica"] as const;
+// Esattamente 25 carte in totale, con questa distribuzione di rarità.
+const RARITY_PLAN: { rarity: CardRarity; count: number }[] = [
+  { rarity: "leggendaria", count: 3 },
+  { rarity: "epica", count: 5 },
+  { rarity: "rara", count: 7 },
+  { rarity: "comune", count: 10 },
+];
 
-// 3 carte per ognuno degli 8 mondi = 24 carte nel catalogo base
-export const CARD_CATALOG: CardDef[] = WORLDS.flatMap((world, wIdx) => {
-  return [0, 1, 2].map((i) => {
-    const effect = EFFECTS[(wIdx * 3 + i) % EFFECTS.length];
-    const rarity = RARITY_CYCLE[i % RARITY_CYCLE.length];
-    return {
-      id: `${world.id}-card-${i + 1}`,
-      name: `${world.name.replace(/^Il |^La |^L'|^Le /i, "")} — Talismano ${i + 1}`,
-      worldId: world.id,
-      rarity,
-      emoji: world.emoji,
-      effect,
-    } satisfies CardDef;
-  });
-});
+export const CARD_CATALOG: CardDef[] = (() => {
+  const list: CardDef[] = [];
+  const perWorldCount: Record<string, number> = {};
+  let globalIndex = 0;
+
+  for (const { rarity, count } of RARITY_PLAN) {
+    for (let i = 0; i < count; i++) {
+      const world = WORLDS[globalIndex % WORLDS.length];
+      const effect = EFFECTS[globalIndex % EFFECTS.length];
+      const n = (perWorldCount[world.id] = (perWorldCount[world.id] ?? 0) + 1);
+      list.push({
+        id: `card-${globalIndex + 1}`,
+        name: `Talismano di ${world.name} ${n}`,
+        worldId: world.id,
+        rarity,
+        emoji: world.emoji,
+        effect,
+      });
+      globalIndex++;
+    }
+  }
+  return list;
+})();
+
+// Probabilità di estrazione per OGNI singola carta pescata da un pacchetto:
+// 50% comune, 38% rara, 10% epica, 2% leggendaria.
+function pickRarity(): CardRarity {
+  const roll = Math.random();
+  if (roll < 0.5) return "comune";
+  if (roll < 0.88) return "rara";
+  if (roll < 0.98) return "epica";
+  return "leggendaria";
+}
 
 export function pickRandomCards(count: number): CardDef[] {
   const result: CardDef[] = [];
   for (let i = 0; i < count; i++) {
-    const roll = Math.random();
-    // leggera pesatura verso le rarità basse
-    const pool = CARD_CATALOG.filter((c) => {
-      if (roll < 0.55) return c.rarity === "comune";
-      if (roll < 0.85) return c.rarity === "rara";
-      if (roll < 0.97) return c.rarity === "epica";
-      return c.rarity === "leggendaria";
-    });
+    const rarity = pickRarity();
+    const pool = CARD_CATALOG.filter((c) => c.rarity === rarity);
     const source = pool.length > 0 ? pool : CARD_CATALOG;
     result.push(source[Math.floor(Math.random() * source.length)]);
   }

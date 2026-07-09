@@ -402,14 +402,56 @@ function TargetMarker({
   );
 }
 
-function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color: string; isCurrent: boolean }) {
+function MonopolyToken({
+  token,
+  color,
+  isCurrent,
+  movingRef,
+}: {
+  token: PawnTokenId;
+  color: string;
+  isCurrent: boolean;
+  movingRef: { current: boolean };
+}) {
   const glow = isCurrent ? color : "#000000";
   const glowI = isCurrent ? 0.6 : 0;
+
+  const bodyRef = useRef<THREE.Group>(null);
+  const wheelRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const spinRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state, delta) => {
+    const moving = movingRef.current;
+    const t = state.clock.getElapsedTime();
+
+    wheelRefs.current.forEach((w) => {
+      if (w) w.rotation.x += (moving ? 14 : 0) * delta;
+    });
+    if (spinRef.current) {
+      spinRef.current.rotation.x += (moving ? 12 : 0) * delta;
+    }
+
+    if (bodyRef.current) {
+      if (moving && (token === "dog" || token === "boot")) {
+        bodyRef.current.position.y = Math.abs(Math.sin(t * 11)) * 0.09;
+        bodyRef.current.rotation.z = 0;
+      } else if (moving && token === "ship") {
+        bodyRef.current.position.y = 0;
+        bodyRef.current.rotation.z = Math.sin(t * 6) * 0.12;
+      } else if (moving && token === "hat") {
+        bodyRef.current.rotation.y += delta * 7;
+        bodyRef.current.position.y = Math.abs(Math.sin(t * 9)) * 0.05;
+      } else {
+        bodyRef.current.position.y = 0;
+        bodyRef.current.rotation.set(0, 0, 0);
+      }
+    }
+  });
 
   switch (token) {
     case "hat":
       return (
-        <group>
+        <group ref={bodyRef}>
           <mesh position={[0, 0.08, 0]} castShadow>
             <cylinderGeometry args={[0.34, 0.34, 0.05, 20]} />
             <meshStandardMaterial color="#1a1a1a" emissive={glow} emissiveIntensity={glowI} />
@@ -436,9 +478,17 @@ function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color:
             <boxGeometry args={[0.3, 0.14, 0.22]} />
             <meshStandardMaterial color={color} flatShading />
           </mesh>
-          {[0.18, -0.18].flatMap((x) =>
-            [0.14, -0.14].map((z) => (
-              <mesh key={`${x}-${z}`} position={[x, 0.12, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          {[0.18, -0.18].flatMap((x, xi) =>
+            [0.14, -0.14].map((z, zi) => (
+              <mesh
+                key={`${x}-${z}`}
+                ref={(el) => {
+                  wheelRefs.current[xi * 2 + zi] = el;
+                }}
+                position={[x, 0.12, z]}
+                rotation={[0, 0, Math.PI / 2]}
+                castShadow
+              >
                 <cylinderGeometry args={[0.09, 0.09, 0.07, 14]} />
                 <meshStandardMaterial color="#1a1a1a" />
               </mesh>
@@ -449,7 +499,7 @@ function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color:
 
     case "dog":
       return (
-        <group>
+        <group ref={bodyRef}>
           <mesh position={[0, 0.28, 0]} castShadow>
             <boxGeometry args={[0.4, 0.16, 0.16]} />
             <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
@@ -484,7 +534,7 @@ function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color:
 
     case "boot":
       return (
-        <group>
+        <group ref={bodyRef}>
           <mesh position={[0.04, 0.07, 0]} castShadow>
             <boxGeometry args={[0.44, 0.08, 0.2]} />
             <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
@@ -502,7 +552,7 @@ function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color:
 
     case "ship":
       return (
-        <group>
+        <group ref={bodyRef}>
           <mesh position={[0, 0.22, 0]} castShadow>
             <boxGeometry args={[0.58, 0.14, 0.22]} />
             <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
@@ -526,7 +576,7 @@ function MonopolyToken({ token, color, isCurrent }: { token: PawnTokenId; color:
             <boxGeometry args={[0.38, 0.14, 0.26]} />
             <meshStandardMaterial color={color} emissive={glow} emissiveIntensity={glowI} flatShading />
           </mesh>
-          <mesh position={[0.22, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <mesh ref={spinRef} position={[0.22, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <torusGeometry args={[0.1, 0.03, 8, 16]} />
             <meshStandardMaterial color="#1a1a1a" />
           </mesh>
@@ -554,9 +604,37 @@ function PawnToken({
   name: string;
   token: PawnTokenId;
 }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const movingRef = useRef(false);
+  const mounted = useRef(false);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    if (!mounted.current) {
+      groupRef.current.position.set(position[0], position[1], position[2]);
+      mounted.current = true;
+      movingRef.current = false;
+      return;
+    }
+    const cur = groupRef.current.position;
+    const dx = position[0] - cur.x;
+    const dy = position[1] - cur.y;
+    const dz = position[2] - cur.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    movingRef.current = dist > 0.02;
+    if (dist > 0.001) {
+      const ease = Math.min(1, delta * 5);
+      cur.x += dx * ease;
+      cur.y += dy * ease;
+      cur.z += dz * ease;
+    } else {
+      cur.set(position[0], position[1], position[2]);
+    }
+  });
+
   return (
-    <group position={position}>
-      <MonopolyToken token={token} color={color} isCurrent={isCurrent} />
+    <group ref={groupRef}>
+      <MonopolyToken token={token} color={color} isCurrent={isCurrent} movingRef={movingRef} />
       <Billboard position={[0, 1.05, 0]}>
         <Text
           fontSize={0.32}
