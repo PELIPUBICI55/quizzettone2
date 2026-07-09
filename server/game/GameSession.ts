@@ -186,6 +186,7 @@ export class GameSession {
         name: me.name,
         coins: me.coins,
         isHost: me.isHost,
+        connected: me.connected,
         cardCount: me.collection.length,
         collection: me.collection,
         activeEffects: me.activeEffects,
