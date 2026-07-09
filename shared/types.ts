@@ -84,6 +84,7 @@ export interface MyState extends PlayerSummary {
 
 export interface GameStateSnapshot {
   code: string;
+  phase: "lobby" | "playing";
   worlds: WorldDef[];
   packs: PackDef[];
   cardCatalog: CardDef[];
@@ -144,6 +145,8 @@ export interface ClientToServerEvents {
     payload: { code: string; name: string },
     cb: (res: JoinResult) => void
   ) => void;
+  "party:start": () => void;
+  "party:kick": (payload: { playerId: string }) => void;
   "board:roll": () => void;
   "board:confirmMove": (payload: { direction?: string }) => void;
   "quiz:answer": (payload: {
@@ -165,4 +168,5 @@ export interface ServerToClientEvents {
   "quiz:result": (payload: QuizResultPayload) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
   "error:message": (payload: { message: string }) => void;
+  "party:kicked": () => void;
 }

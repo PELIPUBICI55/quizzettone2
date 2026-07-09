@@ -42,6 +42,21 @@ io.on("connection", (socket) => {
     session.broadcastState(io);
   });
 
+  socket.on("party:start", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.startGame(loc.playerId, io);
+  });
+
+  socket.on("party:kick", ({ playerId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    const kickedSocketId = session?.kickPlayer(loc.playerId, playerId, io);
+    if (kickedSocketId) socketLocation.delete(kickedSocketId);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

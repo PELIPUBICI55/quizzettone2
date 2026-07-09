@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   GameStateSnapshot,
   PackOpenedPayload,
@@ -11,6 +11,8 @@ import { JoinScreen } from "./components/JoinScreen";
 import { Wheel } from "./components/Wheel";
 import { QuizMinigame } from "./components/QuizMinigame";
 import { Cittadella } from "./screens/Cittadella";
+import { Lobby } from "./screens/Lobby";
+import { TurnOrderReveal } from "./screens/TurnOrderReveal";
 import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
 import { CollectionMenu } from "./components/CollectionMenu";
@@ -24,9 +26,17 @@ export default function App() {
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
   const [surpriseMessage, setSurpriseMessage] = useState<string | null>(null);
+  const [showTurnOrder, setShowTurnOrder] = useState(false);
+  const prevPhase = useRef<"lobby" | "playing" | null>(null);
 
   useEffect(() => {
-    const onState = (s: GameStateSnapshot) => setState(s);
+    const onState = (s: GameStateSnapshot) => {
+      if (prevPhase.current === "lobby" && s.phase === "playing") {
+        setShowTurnOrder(true);
+      }
+      prevPhase.current = s.phase;
+      setState(s);
+    };
     const onWheel = (p: WheelSpinPayload) => {
       setWheelInfo(p);
       setQuizPayload(null);
@@ -41,6 +51,12 @@ export default function App() {
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurprise = (p: { playerId: string; message: string }) => setSurpriseMessage(p.message);
     const onError = (p: { message: string }) => setError(p.message);
+    const onKicked = () => {
+      setState(null);
+      setShowTurnOrder(false);
+      prevPhase.current = null;
+      setError("Sei stato espulso dalla partita dall'host.");
+    };
     const onDisconnect = () => setState(null);
 
     socket.on("state:update", onState);
@@ -50,6 +66,7 @@ export default function App() {
     socket.on("shop:packOpened", onPack);
     socket.on("board:surprise", onSurprise);
     socket.on("error:message", onError);
+    socket.on("party:kicked", onKicked);
     socket.on("disconnect", onDisconnect);
 
     return () => {
@@ -60,6 +77,7 @@ export default function App() {
       socket.off("shop:packOpened", onPack);
       socket.off("board:surprise", onSurprise);
       socket.off("error:message", onError);
+      socket.off("party:kicked", onKicked);
       socket.off("disconnect", onDisconnect);
     };
   }, []);
@@ -85,6 +103,27 @@ export default function App() {
           </div>
         )}
         <JoinScreen onError={setError} />
+      </div>
+    );
+  }
+
+  if (state.phase === "lobby") {
+    return (
+      <div className="app-shell">
+        {error && (
+          <div className="error-banner" style={{ margin: "1rem" }}>
+            {error}
+          </div>
+        )}
+        <Lobby state={state} />
+      </div>
+    );
+  }
+
+  if (showTurnOrder) {
+    return (
+      <div className="app-shell">
+        <TurnOrderReveal state={state} onContinue={() => setShowTurnOrder(false)} />
       </div>
     );
   }

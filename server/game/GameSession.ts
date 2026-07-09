@@ -50,6 +50,7 @@ export class GameSession {
   private players = new Map<string, InternalPlayer>();
   private turnOrder: string[] = [];
   private currentTurnIndex = 0;
+  private phase: "lobby" | "playing" = "lobby";
 
   constructor(code: string) {
     this.code = code;
@@ -124,6 +125,7 @@ export class GameSession {
 
     return {
       code: this.code,
+      phase: this.phase,
       worlds: WORLDS,
       packs: PACKS,
       cardCatalog: CARD_CATALOG,
@@ -159,10 +161,71 @@ export class GameSession {
     }
   }
 
+  startGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (!player.isHost) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Solo l'host può avviare la partita.",
+      });
+      return;
+    }
+    if (this.phase === "playing") return;
+    if (this.players.size < 2) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Serve almeno un altro giocatore per iniziare.",
+      });
+      return;
+    }
+
+    // mescola casualmente l'ordine dei turni (Fisher-Yates)
+    for (let i = this.turnOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.turnOrder[i], this.turnOrder[j]] = [this.turnOrder[j], this.turnOrder[i]];
+    }
+    this.currentTurnIndex = 0;
+    this.phase = "playing";
+    this.broadcastState(io);
+  }
+
+  // Espelle un giocatore dalla partita. Ritorna il socketId dell'espulso
+  // (serve al chiamante per ripulire la mappa socket->giocatore) oppure
+  // undefined se l'operazione non è stata eseguita.
+  kickPlayer(hostId: string, targetId: string, io: IOServer): string | undefined {
+    const host = this.players.get(hostId);
+    if (!host) return undefined;
+    if (!host.isHost) {
+      io.to(host.socketId).emit("error:message", {
+        message: "Solo l'host può espellere un giocatore.",
+      });
+      return undefined;
+    }
+    if (targetId === hostId) {
+      io.to(host.socketId).emit("error:message", {
+        message: "Non puoi espellere te stesso.",
+      });
+      return undefined;
+    }
+    const target = this.players.get(targetId);
+    if (!target) return undefined;
+
+    const targetSocketId = target.socketId;
+    io.to(targetSocketId).emit("party:kicked");
+    this.removePlayer(targetId);
+    this.broadcastState(io);
+    return targetSocketId;
+  }
+
   rollDice(playerId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
 
+    if (this.phase !== "playing") {
+      io.to(player.socketId).emit("error:message", {
+        message: "La partita non è ancora iniziata.",
+      });
+      return;
+    }
     if (this.currentTurnPlayerId() !== playerId) {
       io.to(player.socketId).emit("error:message", {
         message: "Non è il tuo turno.",
