@@ -29,6 +29,14 @@ function lerp3(
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
+const CITTADELLA_SIZE = 3.6;
+const WORLD_SIZE = 2.7;
+
+function islandRadius(nodeId: string): number {
+  const size = nodeId === "cittadella" ? CITTADELLA_SIZE : WORLD_SIZE;
+  return size * 0.65;
+}
+
 function FloatingIsland({
   position,
   color,
@@ -52,6 +60,23 @@ function FloatingIsland({
     groupRef.current.rotation.y = Math.sin(t * 0.12 + phase) * 0.04;
   });
 
+  const cloudPuffs = useMemo(() => {
+    const arr: { x: number; z: number; y: number; s: number }[] = [];
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + rand(seed + i) * 0.4;
+      const r = size * 0.4 * (0.7 + rand(seed + i * 3) * 0.35);
+      arr.push({
+        x: Math.cos(a) * r,
+        z: Math.sin(a) * r,
+        y: -size * 0.16 + rand(seed + i * 5) * size * 0.1,
+        s: size * (0.36 + rand(seed + i * 7) * 0.22),
+      });
+    }
+    arr.push({ x: 0, z: 0, y: -size * 0.2, s: size * 0.58 });
+    return arr;
+  }, [seed, size]);
+
   const decos = useMemo(() => {
     const arr: { x: number; z: number; s: number; type: "tree" | "rock" }[] = [];
     const count = 4 + Math.floor(rand(seed) * 3);
@@ -70,11 +95,13 @@ function FloatingIsland({
 
   return (
     <group ref={groupRef} position={position}>
-      {/* base rocciosa */}
-      <mesh position={[0, -size * 0.55, 0]} castShadow receiveShadow>
-        <coneGeometry args={[size * 0.58, size * 1.15, 7]} />
-        <meshStandardMaterial color="#4a3a2a" roughness={0.95} flatShading />
-      </mesh>
+      {/* cumulo di nuvole soffici sotto la piattaforma */}
+      {cloudPuffs.map((p, i) => (
+        <mesh key={i} position={[p.x, p.y, p.z]} castShadow receiveShadow>
+          <sphereGeometry args={[p.s, 12, 12]} />
+          <meshStandardMaterial color="#f2ecff" roughness={0.9} />
+        </mesh>
+      ))}
       {/* piattaforma superiore */}
       <mesh position={[0, 0, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[size * 0.62, size * 0.68, size * 0.22, 8]} />
@@ -136,30 +163,54 @@ function Bridge3D({
   a,
   b,
   length,
+  radiusA,
+  radiusB,
 }: {
   a: [number, number, number];
   b: [number, number, number];
   length: number;
+  radiusA: number;
+  radiusB: number;
 }) {
-  const dx = b[0] - a[0];
-  const dz = b[2] - a[2];
+  const fullDx = b[0] - a[0];
+  const fullDz = b[2] - a[2];
+  const fullDist = Math.sqrt(fullDx * fullDx + fullDz * fullDz) || 1;
+  const dirx = fullDx / fullDist;
+  const dirz = fullDz / fullDist;
+
+  // accorcia il ponte per non compenetrare le isole: parte e finisce
+  // appena fuori dal bordo della piattaforma, non dal centro dell'isola
+  const margin = 0.6;
+  const tStart = (radiusA + margin) / fullDist;
+  const tEnd = 1 - (radiusB + margin) / fullDist;
+  const start: [number, number, number] = [
+    a[0] + fullDx * tStart,
+    a[1] + (b[1] - a[1]) * tStart,
+    a[2] + fullDz * tStart,
+  ];
+  const end: [number, number, number] = [
+    a[0] + fullDx * tEnd,
+    a[1] + (b[1] - a[1]) * tEnd,
+    a[2] + fullDz * tEnd,
+  ];
+
+  const dx = end[0] - start[0];
+  const dz = end[2] - start[2];
   const dist = Math.sqrt(dx * dx + dz * dz) || 1;
-  const dirx = dx / dist;
-  const dirz = dz / dist;
   const perpx = -dirz;
   const perpz = dirx;
   const angle = Math.atan2(dirx, dirz);
 
-  const railOffset = 1.3;
-  const railHeight = 1.05;
+  const railOffset = 1.25;
+  const railHeight = 0.95;
 
   const planks = Array.from({ length }, (_, i) => {
     const t = (i + 0.5) / length;
-    const dip = Math.sin(t * Math.PI) * 0.4;
+    const dip = Math.sin(t * Math.PI) * 0.35;
     return {
-      x: a[0] + dx * t,
-      y: a[1] + (b[1] - a[1]) * t - dip,
-      z: a[2] + dz * t,
+      x: start[0] + dx * t,
+      y: start[1] + (end[1] - start[1]) * t - dip,
+      z: start[2] + dz * t,
     };
   });
 
@@ -167,11 +218,11 @@ function Bridge3D({
     const pts: [number, number, number][] = [];
     for (let i = 0; i <= length; i++) {
       const t = i / length;
-      const dip = Math.sin(t * Math.PI) * 0.4;
+      const dip = Math.sin(t * Math.PI) * 0.35;
       pts.push([
-        a[0] + dx * t + perpx * railOffset * sign,
-        a[1] + (b[1] - a[1]) * t - dip + railHeight,
-        a[2] + dz * t + perpz * railOffset * sign,
+        start[0] + dx * t + perpx * railOffset * sign,
+        start[1] + (end[1] - start[1]) * t - dip + railHeight,
+        start[2] + dz * t + perpz * railOffset * sign,
       ]);
     }
     return pts;
@@ -181,37 +232,46 @@ function Bridge3D({
 
   return (
     <group>
+      {/* tavole di legno del ponte, ben distanziate tra loro */}
       {planks.map((p, i) => (
         <mesh key={i} position={[p.x, p.y, p.z]} rotation={[0, angle, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.9, 0.2, (dist / length) * 0.8]} />
-          <meshStandardMaterial
-            color="#a855f7"
-            emissive="#7c3aed"
-            emissiveIntensity={0.35}
-            roughness={0.55}
-            toneMapped={false}
-          />
+          <boxGeometry args={[2, 0.16, (dist / length) * 0.62]} />
+          <meshStandardMaterial color="#8a5a30" roughness={0.9} flatShading />
         </mesh>
       ))}
 
-      <Line points={railSide(1)} color="#f0abfc" lineWidth={2.5} />
-      <Line points={railSide(-1)} color="#f0abfc" lineWidth={2.5} />
+      {/* corrimano di corda */}
+      <Line points={railSide(1)} color="#c9a875" lineWidth={2.5} />
+      <Line points={railSide(-1)} color="#c9a875" lineWidth={2.5} />
 
       {postTs.flatMap((t, i) => {
-        const dip = Math.sin(t * Math.PI) * 0.4;
-        const baseY = a[1] + (b[1] - a[1]) * t - dip;
-        const cx = a[0] + dx * t;
-        const cz = a[2] + dz * t;
+        const dip = Math.sin(t * Math.PI) * 0.35;
+        const baseY = start[1] + (end[1] - start[1]) * t - dip;
+        const cx = start[0] + dx * t;
+        const cz = start[2] + dz * t;
         return [1, -1].map((sign) => (
-          <Line
-            key={`${i}-${sign}`}
-            points={[
-              [cx + perpx * 0.9 * sign, baseY + 0.1, cz + perpz * 0.9 * sign],
-              [cx + perpx * railOffset * sign, baseY + railHeight, cz + perpz * railOffset * sign],
-            ]}
-            color="#7c3aed"
-            lineWidth={1.5}
-          />
+          <group key={`${i}-${sign}`}>
+            <Line
+              points={[
+                [cx + perpx * 0.85 * sign, baseY + 0.1, cz + perpz * 0.85 * sign],
+                [cx + perpx * railOffset * sign, baseY + railHeight, cz + perpz * railOffset * sign],
+              ]}
+              color="#6b4423"
+              lineWidth={1.5}
+            />
+            {/* lanterna magica ogni due paletti, per un tocco fantasy */}
+            {i % 2 === 0 && (
+              <mesh position={[cx + perpx * railOffset * sign, baseY + railHeight + 0.15, cz + perpz * railOffset * sign]}>
+                <sphereGeometry args={[0.09, 8, 8]} />
+                <meshStandardMaterial
+                  color="#ffe9a8"
+                  emissive="#ffcf6b"
+                  emissiveIntensity={1.6}
+                  toneMapped={false}
+                />
+              </mesh>
+            )}
+          </group>
         ));
       })}
     </group>
@@ -314,17 +374,26 @@ export function BoardScene3D({ state }: Props) {
         {state.board.edges.map((edge) => {
           const a = nodePos3D(edge.a, state.worlds);
           const b = nodePos3D(edge.b, state.worlds);
-          return <Bridge3D key={edge.id} a={a} b={b} length={edge.length} />;
+          return (
+            <Bridge3D
+              key={edge.id}
+              a={a}
+              b={b}
+              length={edge.length}
+              radiusA={islandRadius(edge.a)}
+              radiusB={islandRadius(edge.b)}
+            />
+          );
         })}
 
-        <FloatingIsland position={[0, 0, 0]} color="#c9a227" size={3.6} seed={0} isCenter />
+        <FloatingIsland position={[0, 0, 0]} color="#c9a227" size={CITTADELLA_SIZE} seed={0} isCenter />
 
         {state.worlds.map((w, i) => (
           <FloatingIsland
             key={w.id}
             position={nodePos3D(w.id, state.worlds)}
             color={w.colorFrom}
-            size={2.7}
+            size={WORLD_SIZE}
             seed={i + 1}
           />
         ))}
