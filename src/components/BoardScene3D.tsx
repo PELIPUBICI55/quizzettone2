@@ -549,7 +549,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
 
   return (
     <div style={{ width: "100%", height: "min(70vh, 640px)", borderRadius: 16, overflow: "hidden" }}>
-      <Canvas shadows camera={{ position: [0, 17, 26], fov: 42 }} gl={{ alpha: true }}>
+      <Canvas shadows camera={{ position: [0, 19, 25], fov: 42 }} gl={{ alpha: true }}>
         <ambientLight intensity={0.55} />
         <directionalLight
           position={[12, 22, 8]}
@@ -565,6 +565,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
           minDistance={12}
           maxDistance={46}
           maxPolarAngle={Math.PI / 2 - 0.04}
+          target={[0, -2.5, 0]}
         />
 
         {state.board.edges.map((edge) => {
