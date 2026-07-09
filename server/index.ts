@@ -21,25 +21,26 @@ const socketLocation = new Map<string, { code: string; playerId: string }>();
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 io.on("connection", (socket) => {
-  socket.on("party:create", ({ name }, cb) => {
+  socket.on("party:create", ({ name, clientId }, cb) => {
     const session = parties.create();
-    const player = session.addPlayer(socket.id, name);
+    const player = session.addPlayer(socket.id, name, clientId);
     socketLocation.set(socket.id, { code: session.code, playerId: player.id });
     cb({ ok: true, code: session.code });
     const snap = session.getSnapshot(player.id);
     if (snap) socket.emit("state:update", snap);
   });
 
-  socket.on("party:join", ({ code, name }, cb) => {
+  socket.on("party:join", ({ code, name, clientId }, cb) => {
     const session = parties.get(code);
     if (!session) {
       cb({ ok: false, error: "Codice partita non trovato." });
       return;
     }
-    const player = session.addPlayer(socket.id, name);
+    const player = session.addPlayer(socket.id, name, clientId);
     socketLocation.set(socket.id, { code: session.code, playerId: player.id });
     cb({ ok: true, code: session.code });
     session.broadcastState(io);
+    session.resendPendingQuestion(player.id, io);
   });
 
   socket.on("party:start", () => {
@@ -105,7 +106,7 @@ io.on("connection", (socket) => {
     socketLocation.delete(socket.id);
     const session = parties.get(loc.code);
     if (!session) return;
-    session.removePlayer(loc.playerId);
+    session.markDisconnected(loc.playerId);
     session.broadcastState(io);
     parties.removeIfEmpty(loc.code);
   });

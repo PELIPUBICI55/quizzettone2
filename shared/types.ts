@@ -72,6 +72,7 @@ export interface PlayerSummary {
   name: string;
   coins: number;
   isHost: boolean;
+  connected: boolean;
   cardCount: number; // quante carte possiede in totale (visibile agli altri, non quali)
 }
 
@@ -141,11 +142,11 @@ export interface PackOpenedPayload {
 // Eventi client -> server
 export interface ClientToServerEvents {
   "party:create": (
-    payload: { name: string },
+    payload: { name: string; clientId: string },
     cb: (res: JoinResult) => void
   ) => void;
   "party:join": (
-    payload: { code: string; name: string },
+    payload: { code: string; name: string; clientId: string },
     cb: (res: JoinResult) => void
   ) => void;
   "party:start": () => void;

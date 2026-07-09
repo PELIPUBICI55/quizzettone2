@@ -43,11 +43,12 @@ export function PartyMenu({ state }: Props) {
                     gap: "0.5rem",
                   }}
                 >
-                  <span style={{ fontSize: "0.9rem" }}>
+                  <span style={{ fontSize: "0.9rem", opacity: p.connected ? 1 : 0.55 }}>
                     {p.id === state.currentTurnPlayerId && "🎲 "}
                     {p.name}
                     {p.isHost && " 👑"}
                     {p.id === state.me.id && " (tu)"}
+                    {!p.connected && " · 🔴 offline"}
                     <br />
                     <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
                       🪙{p.coins} · 🎴{p.cardCount}

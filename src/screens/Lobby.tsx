@@ -35,6 +35,7 @@ export function Lobby({ state }: Props) {
                 {p.name}
                 {p.isHost && " 👑"}
                 {p.id === state.me.id && " (tu)"}
+                {!p.connected && " · 🔴 offline"}
               </span>
               {isHost && p.id !== state.me.id && (
                 <button

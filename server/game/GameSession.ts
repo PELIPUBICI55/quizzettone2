@@ -18,6 +18,8 @@ type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 interface InternalPlayer {
   id: string;
   socketId: string;
+  clientId: string;
+  connected: boolean;
   name: string;
   isHost: boolean;
   coins: number;
@@ -57,14 +59,25 @@ export class GameSession {
   }
 
   get isEmpty() {
-    return this.players.size === 0;
+    return this.players.size === 0 || [...this.players.values()].every((p) => !p.connected);
   }
 
-  addPlayer(socketId: string, name: string): InternalPlayer {
+  addPlayer(socketId: string, name: string, clientId: string): InternalPlayer {
+    // se questo browser era già un giocatore di questa partita (stesso clientId),
+    // lo riagganciamo al nuovo socket senza perdere i suoi progressi
+    const existing = [...this.players.values()].find((p) => p.clientId === clientId);
+    if (existing) {
+      existing.socketId = socketId;
+      existing.connected = true;
+      return existing;
+    }
+
     const isHost = this.players.size === 0;
     const player: InternalPlayer = {
       id: nextPlayerId(),
       socketId,
+      clientId,
+      connected: true,
       name: name.trim().slice(0, 20) || "Giocatore",
       isHost,
       coins: 50, // gruzzoletto iniziale
@@ -79,6 +92,33 @@ export class GameSession {
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
     return player;
+  }
+
+  // Chiamato quando un socket si disconnette: NON rimuove il giocatore dalla
+  // partita (i suoi progressi restano), lo segna solo come offline finché
+  // non rientra con lo stesso codice.
+  markDisconnected(playerId: string) {
+    const player = this.players.get(playerId);
+    if (player) player.connected = false;
+  }
+
+  // Se chi rientra aveva una domanda del quiz ancora aperta al momento della
+  // disconnessione, gliela rimanda così può continuare a rispondere.
+  resendPendingQuestion(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingQuestion) return;
+    const q = player.pendingQuestion;
+    io.to(player.socketId).emit("quiz:question", {
+      playerId: player.id,
+      question: {
+        id: q.id,
+        category: q.category,
+        question: q.question,
+        options: q.options,
+        timeLimitSec: q.timeLimitSec,
+      },
+      activeEffects: player.activeEffects,
+    });
   }
 
   findBySocket(socketId: string): InternalPlayer | undefined {
@@ -138,6 +178,7 @@ export class GameSession {
         name: p.name,
         coins: p.coins,
         isHost: p.isHost,
+        connected: p.connected,
         cardCount: p.collection.length,
       })),
       me: {

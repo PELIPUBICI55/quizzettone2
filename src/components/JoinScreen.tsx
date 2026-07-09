@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { socket } from "../socket";
+import { clientId } from "../clientId";
 
 export function JoinScreen({ onError }: { onError: (msg: string) => void }) {
   const [mode, setMode] = useState<"create" | "join">("create");
@@ -16,7 +17,7 @@ export function JoinScreen({ onError }: { onError: (msg: string) => void }) {
     if (!socket.connected) socket.connect();
 
     if (mode === "create") {
-      socket.emit("party:create", { name }, (res) => {
+      socket.emit("party:create", { name, clientId }, (res) => {
         setLoading(false);
         if (!res.ok) onError(res.error ?? "Errore nella creazione della partita.");
       });
@@ -26,7 +27,7 @@ export function JoinScreen({ onError }: { onError: (msg: string) => void }) {
         onError("Inserisci il codice della partita.");
         return;
       }
-      socket.emit("party:join", { code: code.trim(), name }, (res) => {
+      socket.emit("party:join", { code: code.trim(), name, clientId }, (res) => {
         setLoading(false);
         if (!res.ok) onError(res.error ?? "Errore nell'ingresso alla partita.");
       });
