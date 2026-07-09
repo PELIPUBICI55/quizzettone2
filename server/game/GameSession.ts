@@ -225,23 +225,22 @@ export class GameSession {
       if (!chosen) return; // nodo isolato, non dovrebbe succedere
       const edge = edgeById(chosen.edgeId);
       if (!edge) return;
-      const newProgress = Math.min(roll, edge.length);
-      if (newProgress >= edge.length) {
+      if (roll > edge.length) {
         player.boardPosition = { nodeId: chosen.neighborId, onNode: true };
       } else {
         player.boardPosition = {
           nodeId: pos.nodeId,
           onNode: false,
           edgeId: edge.id,
-          progress: newProgress,
+          progress: roll,
         };
       }
     } else {
       const edge = edgeById(pos.edgeId!);
       if (!edge) return;
       const destinationNodeId = edge.a === pos.nodeId ? edge.b : edge.a;
-      const newProgress = Math.min((pos.progress ?? 0) + roll, edge.length);
-      if (newProgress >= edge.length) {
+      const newProgress = (pos.progress ?? 0) + roll;
+      if (newProgress > edge.length) {
         player.boardPosition = { nodeId: destinationNodeId, onNode: true };
       } else {
         player.boardPosition = {

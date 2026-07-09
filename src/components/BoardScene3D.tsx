@@ -483,8 +483,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
     for (const n of directionChoice.neighbors) {
       const edge = state.board.edges.find((e) => e.id === n.edgeId);
       if (!edge) continue;
-      const reach = Math.min(directionChoice.roll, edge.length);
-      if (reach >= edge.length) {
+      if (directionChoice.roll > edge.length) {
         highlightedNodeIds.add(n.neighborId);
       } else {
         const destPos = nodePos3D(n.neighborId, state.worlds);
@@ -494,7 +493,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
           islandRadius(directionChoice.nodeId),
           islandRadius(n.neighborId)
         );
-        const t = (reach - 0.5) / edge.length;
+        const t = (directionChoice.roll - 0.5) / edge.length;
         const dip = Math.sin(t * Math.PI) * 0.35;
         const base = lerp3(start, end, t);
         midBridgeTargets.push({ neighborId: n.neighborId, point: [base[0], base[1] - dip + 0.35, base[2]] });
