@@ -1,0 +1,361 @@
+import { useMemo, useRef } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Line, Billboard, Text } from "@react-three/drei";
+import type * as THREE from "three";
+import type { BoardPosition, GameStateSnapshot, WorldDef } from "../../shared/types";
+
+const RADIUS = 13;
+
+// generatore pseudo-casuale deterministico (stesso seed = stesso risultato ad ogni render)
+function rand(seed: number) {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function nodePos3D(nodeId: string, worlds: WorldDef[]): [number, number, number] {
+  if (nodeId === "cittadella") return [0, 0, 0];
+  const idx = worlds.findIndex((w) => w.id === nodeId);
+  if (idx === -1) return [0, 0, 0];
+  const angle = -Math.PI / 2 + idx * ((2 * Math.PI) / worlds.length);
+  const heightVariance = (rand(idx * 3.7) - 0.5) * 1.6;
+  return [RADIUS * Math.cos(angle), heightVariance, RADIUS * Math.sin(angle)];
+}
+
+function lerp3(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number
+): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function FloatingIsland({
+  position,
+  color,
+  size,
+  seed,
+  isCenter,
+}: {
+  position: [number, number, number];
+  color: string;
+  size: number;
+  seed: number;
+  isCenter?: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const phase = seed * 1.7;
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const t = clock.getElapsedTime();
+    groupRef.current.position.y = position[1] + Math.sin(t * 0.5 + phase) * 0.4;
+    groupRef.current.rotation.y = Math.sin(t * 0.12 + phase) * 0.04;
+  });
+
+  const decos = useMemo(() => {
+    const arr: { x: number; z: number; s: number; type: "tree" | "rock" }[] = [];
+    const count = 4 + Math.floor(rand(seed) * 3);
+    for (let i = 0; i < count; i++) {
+      const a = rand(seed + i * 3.1) * Math.PI * 2;
+      const r = size * (0.25 + rand(seed + i * 7.7) * 0.35);
+      arr.push({
+        x: Math.cos(a) * r,
+        z: Math.sin(a) * r,
+        s: 0.35 + rand(seed + i * 2.3) * 0.35,
+        type: rand(seed + i * 5.3) > 0.45 ? "tree" : "rock",
+      });
+    }
+    return arr;
+  }, [seed, size]);
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* base rocciosa */}
+      <mesh position={[0, -size * 0.55, 0]} castShadow receiveShadow>
+        <coneGeometry args={[size * 0.58, size * 1.15, 7]} />
+        <meshStandardMaterial color="#4a3a2a" roughness={0.95} flatShading />
+      </mesh>
+      {/* piattaforma superiore */}
+      <mesh position={[0, 0, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[size * 0.62, size * 0.68, size * 0.22, 8]} />
+        <meshStandardMaterial color={color} roughness={0.75} flatShading />
+      </mesh>
+      {/* anello di energia magica */}
+      <mesh position={[0, -size * 0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[size * 0.68, 0.05, 8, 32]} />
+        <meshStandardMaterial
+          color="#e879f9"
+          emissive="#e879f9"
+          emissiveIntensity={1.3}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {isCenter ? (
+        <>
+          <mesh position={[0, size * 0.35, 0]} castShadow>
+            <cylinderGeometry args={[size * 0.22, size * 0.26, size * 0.55, 8]} />
+            <meshStandardMaterial color="#c9a227" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, size * 0.7, 0]} castShadow>
+            <coneGeometry args={[size * 0.3, size * 0.4, 8]} />
+            <meshStandardMaterial color="#8a6a1f" roughness={0.4} />
+          </mesh>
+        </>
+      ) : (
+        decos.map((d, i) =>
+          d.type === "tree" ? (
+            <group key={i} position={[d.x, size * 0.11, d.z]}>
+              <mesh position={[0, d.s * 0.4, 0]} castShadow>
+                <cylinderGeometry args={[d.s * 0.06, d.s * 0.08, d.s * 0.5, 5]} />
+                <meshStandardMaterial color="#3a2612" roughness={0.9} />
+              </mesh>
+              <mesh position={[0, d.s * 0.8, 0]} castShadow>
+                <coneGeometry args={[d.s * 0.4, d.s * 0.75, 6]} />
+                <meshStandardMaterial color="#2f6f4f" flatShading roughness={0.8} />
+              </mesh>
+            </group>
+          ) : (
+            <mesh
+              key={i}
+              position={[d.x, size * 0.14 + d.s * 0.15, d.z]}
+              rotation={[rand(seed + i) * Math.PI, rand(seed + i * 2) * Math.PI, 0]}
+              castShadow
+            >
+              <icosahedronGeometry args={[d.s * 0.3, 0]} />
+              <meshStandardMaterial color="#8f8f9a" roughness={0.85} flatShading />
+            </mesh>
+          )
+        )
+      )}
+    </group>
+  );
+}
+
+function Bridge3D({
+  a,
+  b,
+  length,
+}: {
+  a: [number, number, number];
+  b: [number, number, number];
+  length: number;
+}) {
+  const dx = b[0] - a[0];
+  const dz = b[2] - a[2];
+  const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+  const dirx = dx / dist;
+  const dirz = dz / dist;
+  const perpx = -dirz;
+  const perpz = dirx;
+  const angle = Math.atan2(dirx, dirz);
+
+  const railOffset = 1.3;
+  const railHeight = 1.05;
+
+  const planks = Array.from({ length }, (_, i) => {
+    const t = (i + 0.5) / length;
+    const dip = Math.sin(t * Math.PI) * 0.4;
+    return {
+      x: a[0] + dx * t,
+      y: a[1] + (b[1] - a[1]) * t - dip,
+      z: a[2] + dz * t,
+    };
+  });
+
+  const railSide = (sign: number): [number, number, number][] => {
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i <= length; i++) {
+      const t = i / length;
+      const dip = Math.sin(t * Math.PI) * 0.4;
+      pts.push([
+        a[0] + dx * t + perpx * railOffset * sign,
+        a[1] + (b[1] - a[1]) * t - dip + railHeight,
+        a[2] + dz * t + perpz * railOffset * sign,
+      ]);
+    }
+    return pts;
+  };
+
+  const postTs = Array.from({ length: length + 1 }, (_, i) => i / length);
+
+  return (
+    <group>
+      {planks.map((p, i) => (
+        <mesh key={i} position={[p.x, p.y, p.z]} rotation={[0, angle, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.9, 0.2, (dist / length) * 0.8]} />
+          <meshStandardMaterial
+            color="#a855f7"
+            emissive="#7c3aed"
+            emissiveIntensity={0.35}
+            roughness={0.55}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+
+      <Line points={railSide(1)} color="#f0abfc" lineWidth={2.5} />
+      <Line points={railSide(-1)} color="#f0abfc" lineWidth={2.5} />
+
+      {postTs.flatMap((t, i) => {
+        const dip = Math.sin(t * Math.PI) * 0.4;
+        const baseY = a[1] + (b[1] - a[1]) * t - dip;
+        const cx = a[0] + dx * t;
+        const cz = a[2] + dz * t;
+        return [1, -1].map((sign) => (
+          <Line
+            key={`${i}-${sign}`}
+            points={[
+              [cx + perpx * 0.9 * sign, baseY + 0.1, cz + perpz * 0.9 * sign],
+              [cx + perpx * railOffset * sign, baseY + railHeight, cz + perpz * railOffset * sign],
+            ]}
+            color="#7c3aed"
+            lineWidth={1.5}
+          />
+        ));
+      })}
+    </group>
+  );
+}
+
+function PawnToken({
+  position,
+  color,
+  isCurrent,
+  initial,
+}: {
+  position: [number, number, number];
+  color: string;
+  isCurrent: boolean;
+  initial: string;
+}) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.55, 0]} castShadow>
+        <sphereGeometry args={[0.4, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={isCurrent ? color : "#000000"}
+          emissiveIntensity={isCurrent ? 0.7 : 0}
+        />
+      </mesh>
+      <mesh position={[0, 0.15, 0]} castShadow>
+        <coneGeometry args={[0.35, 0.5, 12]} />
+        <meshStandardMaterial color={color} roughness={0.5} />
+      </mesh>
+      <Billboard position={[0, 1.05, 0]}>
+        <mesh>
+          <circleGeometry args={[0.22, 20]} />
+          <meshStandardMaterial color="#241417" />
+        </mesh>
+        <Text fontSize={0.26} color="#f2d98a" anchorX="center" anchorY="middle" position={[0, 0, 0.01]}>
+          {initial}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
+
+interface Props {
+  state: GameStateSnapshot;
+}
+
+const PLAYER_COLORS = [
+  "#e8c44a",
+  "#6fbf8f",
+  "#7aa8e0",
+  "#e08a6f",
+  "#c98ad6",
+  "#e0d06f",
+  "#8fd6c9",
+  "#e07a9c",
+];
+
+export function BoardScene3D({ state }: Props) {
+  const grouped = new Map<string, string[]>();
+  for (const [playerId, pos] of Object.entries(state.positions)) {
+    const key = pos.onNode ? `n-${pos.nodeId}` : `e-${pos.edgeId}-${pos.progress}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), playerId]);
+  }
+
+  const pawnPosition = (pos: BoardPosition): [number, number, number] => {
+    if (pos.onNode) return nodePos3D(pos.nodeId, state.worlds);
+    const edge = state.board.edges.find((e) => e.id === pos.edgeId);
+    if (!edge) return nodePos3D(pos.nodeId, state.worlds);
+    const other = edge.a === pos.nodeId ? edge.b : edge.a;
+    const a = nodePos3D(pos.nodeId, state.worlds);
+    const b = nodePos3D(other, state.worlds);
+    const t = (pos.progress ?? 0) / edge.length;
+    const dip = Math.sin(t * Math.PI) * 0.4;
+    const base = lerp3(a, b, t);
+    return [base[0], base[1] - dip, base[2]];
+  };
+
+  return (
+    <div style={{ width: "100%", height: "min(70vh, 640px)", borderRadius: 16, overflow: "hidden" }}>
+      <Canvas shadows camera={{ position: [0, 17, 26], fov: 42 }} gl={{ alpha: true }}>
+        <ambientLight intensity={0.55} />
+        <directionalLight
+          position={[12, 22, 8]}
+          intensity={1.3}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+        <pointLight position={[0, 5, 0]} intensity={1.1} color="#f0abfc" distance={22} />
+        <fog attach="fog" args={["#170a2e", 28, 62]} />
+        <OrbitControls
+          enablePan={false}
+          minDistance={12}
+          maxDistance={46}
+          maxPolarAngle={Math.PI / 2 - 0.04}
+        />
+
+        {state.board.edges.map((edge) => {
+          const a = nodePos3D(edge.a, state.worlds);
+          const b = nodePos3D(edge.b, state.worlds);
+          return <Bridge3D key={edge.id} a={a} b={b} length={edge.length} />;
+        })}
+
+        <FloatingIsland position={[0, 0, 0]} color="#c9a227" size={3.6} seed={0} isCenter />
+
+        {state.worlds.map((w, i) => (
+          <FloatingIsland
+            key={w.id}
+            position={nodePos3D(w.id, state.worlds)}
+            color={w.colorFrom}
+            size={2.7}
+            seed={i + 1}
+          />
+        ))}
+
+        {[...grouped.entries()].flatMap(([, playerIds]) =>
+          playerIds.map((playerId, slot) => {
+            const pos = state.positions[playerId];
+            if (!pos) return null;
+            const base = pawnPosition(pos);
+            const offsetAngle = (slot * 2 * Math.PI) / Math.max(playerIds.length, 1);
+            const offsetR = playerIds.length > 1 ? 0.9 : 0;
+            const finalPos: [number, number, number] = [
+              base[0] + Math.cos(offsetAngle) * offsetR,
+              base[1] + 0.3,
+              base[2] + Math.sin(offsetAngle) * offsetR,
+            ];
+            const colorIdx = state.turnOrder.indexOf(playerId) % PLAYER_COLORS.length;
+            const player = state.players.find((p) => p.id === playerId);
+            const isCurrent = playerId === state.currentTurnPlayerId;
+            return (
+              <PawnToken
+                key={playerId}
+                position={finalPos}
+                color={PLAYER_COLORS[colorIdx]}
+                isCurrent={isCurrent}
+                initial={player?.name.slice(0, 1).toUpperCase() ?? "?"}
+              />
+            );
+          })
+        )}
+      </Canvas>
+    </div>
+  );
+}
