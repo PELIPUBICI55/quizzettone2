@@ -113,18 +113,21 @@ export interface JoinResult {
 }
 
 export interface WheelSpinPayload {
+  playerId: string;
   worldId: WorldId;
   resultType: MinigameType;
   durationMs: number;
 }
 
 export interface QuizQuestionPayload {
+  playerId: string;
   question: QuizQuestion;
   activeEffects: CardEffectType[];
   eliminatedOptionIndex?: number; // opzione già eliminata dall'effetto "removeWrongOption"
 }
 
 export interface QuizResultPayload {
+  playerId: string;
   correct: boolean;
   correctIndex: number;
   coinsAwarded: number;

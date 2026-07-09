@@ -391,7 +391,8 @@ export class GameSession {
     const resultType = "quiz" as const;
     const durationMs = 2600;
 
-    io.to(player.socketId).emit("wheel:spin", {
+    io.emit("wheel:spin", {
+      playerId: player.id,
       worldId,
       resultType,
       durationMs,
@@ -434,7 +435,8 @@ export class GameSession {
       options: question.options,
       timeLimitSec: question.timeLimitSec,
     };
-    io.to(player.socketId).emit("quiz:question", {
+    io.emit("quiz:question", {
+      playerId: player.id,
       question: publicQuestion,
       activeEffects: player.activeEffects,
       eliminatedOptionIndex,
@@ -482,7 +484,8 @@ export class GameSession {
     player.coins += coinsAwarded;
     player.pendingWorldId = null;
 
-    io.to(player.socketId).emit("quiz:result", {
+    io.emit("quiz:result", {
+      playerId: player.id,
       correct,
       correctIndex: question.correctIndex,
       coinsAwarded,

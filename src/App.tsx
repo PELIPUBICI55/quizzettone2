@@ -10,12 +10,14 @@ import { socket } from "./socket";
 import { JoinScreen } from "./components/JoinScreen";
 import { Wheel } from "./components/Wheel";
 import { QuizMinigame } from "./components/QuizMinigame";
+import { QuizSpectatorView } from "./components/QuizSpectatorView";
 import { Cittadella } from "./screens/Cittadella";
 import { Lobby } from "./screens/Lobby";
 import { TurnOrderReveal } from "./screens/TurnOrderReveal";
 import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
 import { CollectionMenu } from "./components/CollectionMenu";
+import { PartyMenu } from "./components/PartyMenu";
 import { CardView } from "./components/CardView";
 
 export default function App() {
@@ -83,6 +85,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!state) return;
+    setWheelInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setQuizPayload((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setQuizResult((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.currentTurnPlayerId]);
+
+  useEffect(() => {
     if (!surpriseMessage) return;
     const t = setTimeout(() => setSurpriseMessage(null), 3500);
     return () => clearTimeout(t);
@@ -135,6 +145,8 @@ export default function App() {
   };
 
   const currentWorld = state.worlds.find((w) => w.id === wheelInfo?.worldId);
+  const wheelPlayer = state.players.find((p) => p.id === wheelInfo?.playerId);
+  const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
   return (
     <div className="app-shell">
@@ -145,6 +157,7 @@ export default function App() {
           Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
         </span>
         <span className="coin-pill">🪙 {state.me.coins}</span>
+        <PartyMenu state={state} />
         <CollectionMenu state={state} />
       </div>
 
@@ -155,16 +168,22 @@ export default function App() {
           <Wheel
             worldName={currentWorld?.name ?? ""}
             worldEmoji={currentWorld?.emoji ?? "🎡"}
+            playerName={wheelPlayer?.name ?? "?"}
+            isMine={wheelInfo.playerId === state.me.id}
           />
         ) : quizPayload ? (
-          <QuizMinigame
-            payload={quizPayload}
-            result={quizResult}
-            myCollection={state.me.collection}
-            cardCatalog={state.cardCatalog}
-            onUseCard={(cardId) => socket.emit("card:use", { cardId })}
-            onClose={closeQuiz}
-          />
+          quizPayload.playerId === state.me.id ? (
+            <QuizMinigame
+              payload={quizPayload}
+              result={quizResult}
+              myCollection={state.me.collection}
+              cardCatalog={state.cardCatalog}
+              onUseCard={(cardId) => socket.emit("card:use", { cardId })}
+              onClose={closeQuiz}
+            />
+          ) : (
+            <QuizSpectatorView payload={quizPayload} result={quizResult} playerName={quizPlayer?.name ?? "?"} />
+          )
         ) : (
           state.me.pendingShop ? <Cittadella state={state} /> : <Board state={state} />
         )}
