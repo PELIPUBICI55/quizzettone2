@@ -113,17 +113,12 @@ export function Lobby({ state }: Props) {
             <button
               className="btn"
               style={{ width: "100%" }}
-              disabled={state.players.length < 2 || !allChoseToken}
+              disabled={!allChoseToken}
               onClick={() => socket.emit("party:start")}
             >
               🎲 Avvia partita
             </button>
-            {state.players.length < 2 && (
-              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-                Serve almeno un altro giocatore per iniziare.
-              </p>
-            )}
-            {state.players.length >= 2 && !allChoseToken && (
+            {!allChoseToken && (
               <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
                 In attesa che tutti scelgano una pedina.
               </p>

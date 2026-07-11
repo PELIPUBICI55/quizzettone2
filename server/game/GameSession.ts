@@ -313,12 +313,6 @@ export class GameSession {
       return;
     }
     if (this.phase === "playing") return;
-    if (this.players.size < 2) {
-      io.to(player.socketId).emit("error:message", {
-        message: "Serve almeno un altro giocatore per iniziare.",
-      });
-      return;
-    }
     if ([...this.players.values()].some((p) => p.token === null)) {
       io.to(player.socketId).emit("error:message", {
         message: "Tutti i giocatori devono scegliere una pedina prima di iniziare.",
@@ -384,6 +378,22 @@ export class GameSession {
     this.removePlayer(targetId);
     this.broadcastState(io);
     return targetSocketId;
+  }
+
+  setPlayerCoins(hostId: string, targetId: string, amount: number, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host) return;
+    if (!host.isHost) {
+      io.to(host.socketId).emit("error:message", {
+        message: "Solo l'host può modificare le monete.",
+      });
+      return;
+    }
+    const target = this.players.get(targetId);
+    if (!target) return;
+
+    target.coins = Math.max(0, Math.floor(amount));
+    this.broadcastState(io);
   }
 
   rollDice(playerId: string, io: IOServer) {

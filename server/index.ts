@@ -66,6 +66,13 @@ io.on("connection", (socket) => {
     if (kickedSocketId) socketLocation.delete(kickedSocketId);
   });
 
+  socket.on("party:setCoins", ({ playerId, amount }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.setPlayerCoins(loc.playerId, playerId, amount, io);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

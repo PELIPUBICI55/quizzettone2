@@ -214,6 +214,7 @@ export interface ClientToServerEvents {
   ) => void;
   "party:start": () => void;
   "party:kick": (payload: { playerId: string }) => void;
+  "party:setCoins": (payload: { playerId: string; amount: number }) => void;
   "party:chooseToken": (payload: { token: PawnToken }) => void;
   "board:roll": () => void;
   "board:confirmMove": (payload: { direction?: string }) => void;
