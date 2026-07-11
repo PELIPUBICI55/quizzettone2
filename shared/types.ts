@@ -35,7 +35,14 @@ export type CardEffectType =
   | "passiveDoubleImprevistoCoins" // passivo: raddoppia le monete guadagnate/rubate dagli imprevisti
   | "forceSkipTurn" // fai saltare il prossimo turno a un giocatore a scelta
   | "gainThreeShields" // guadagna 3 scudi
-  | "moveAllToCittadella"; // sposta tutti gli avversari alla Cittadella
+  | "moveAllToCittadella" // sposta tutti gli avversari alla Cittadella
+  | "teleportSelfToCittadella" // teletrasportati alla Cittadella
+  | "steal200Coins" // ruba 200 monete a un avversario a scelta
+  | "swapPositionChosen" // scambiati di posizione con un giocatore a scelta
+  | "gainFreeChest" // guadagna subito lo status baule gratis
+  | "discardTwoRandomFromChosen" // fai scartare 2 figurine casuali a un giocatore a scelta
+  | "gainDoubleWin" // guadagna lo status vincita raddoppiata
+  | "advanceThreeTiles"; // avanza di tre caselle
 
 export interface CardEffectDef {
   type: CardEffectType;

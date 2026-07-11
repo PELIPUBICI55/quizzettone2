@@ -143,6 +143,82 @@ export const CARD_CATALOG: CardDef[] = (() => {
         isQuickEffect: false,
       },
     },
+    "card-9": {
+      name: "Sheren",
+      image: "/cards/sheren.webp",
+      description:
+        "Una vita passata in metro, alcuni della MetroB iniziano a credere sia un barbone che vive lì. Non credergli se ti dice che è forte su Fortnite, ma è bravissima a navigare tra i menu di TaniTina, forse anche un po' troppo.",
+      effect: {
+        type: "teleportSelfToCittadella",
+        label: "Effetto rapido: teletrasportati alla Cittadella",
+        isQuickEffect: true,
+      },
+    },
+    "card-10": {
+      name: "Slander",
+      image: "/cards/slander.webp",
+      description:
+        "Grande esperto di coltelli, che usa per minacciare le persone e vincere i giveaway. Ti guarda vestito col pigiama di Hello Kitty mentre ti dice \"ESTO TU NO LO TIENEEEES\", e tu non puoi farci assolutamente nulla.",
+      effect: {
+        type: "steal200Coins",
+        label: "Ruba 200 monete a un avversario a scelta",
+        isQuickEffect: false,
+      },
+    },
+    "card-11": {
+      name: "Glitch",
+      image: "/cards/glitch.webp",
+      description:
+        "Può essere evocato con l'apposito sound alert. Il suo predatore naturale è Venni, fortunatamente si mimetizza bene tra i suoi simili.",
+      effect: {
+        type: "swapPositionChosen",
+        label: "Scambiati di posizione con un giocatore a scelta",
+        isQuickEffect: false,
+      },
+    },
+    "card-12": {
+      name: "Luna",
+      image: "/cards/luna.webp",
+      description: "Hai bevuto l'acquetta? Dai bevi l'acquetta. HO DETTO BEVI L'ACQUETTA. SUBITO.",
+      effect: {
+        type: "gainFreeChest",
+        label: "Effetto rapido: guadagna subito un Baule gratis alla Cittadella",
+        isQuickEffect: true,
+      },
+    },
+    "card-13": {
+      name: "Dante",
+      image: "/cards/dante.webp",
+      description:
+        "Nel mezzo del cammin di nostra vita mi ritrovai per una selva oscura, che la dritta via era smarrita.",
+      effect: {
+        type: "discardTwoRandomFromChosen",
+        label: "Fai scartare 2 figurine casuali a un giocatore a scelta",
+        isQuickEffect: false,
+      },
+    },
+    "card-14": {
+      name: "Checky",
+      image: "/cards/checky.webp",
+      description:
+        "Diventata cieca dopo anni rinchiusa in una cantina al buio. Nota positiva: ha guadagnato il potere speciale di poter vivere a Venezia senza diventare un piccione.",
+      effect: {
+        type: "gainDoubleWin",
+        label: "Raddoppia la vincita del tuo prossimo gioco",
+        isQuickEffect: false,
+      },
+    },
+    "card-15": {
+      name: "TheMadMarco",
+      image: "/cards/themadmarco.webp",
+      description:
+        "Anche il kraken Matteo Renzi ha paura a intraprendere un dibattito con lui. SE TI DICE DI NON PUSHARE, NON PUSHARE.",
+      effect: {
+        type: "advanceThreeTiles",
+        label: "Avanza di tre caselle",
+        isQuickEffect: false,
+      },
+    },
   };
 
   return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));
