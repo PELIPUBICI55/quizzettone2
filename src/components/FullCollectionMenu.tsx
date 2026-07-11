@@ -55,7 +55,7 @@ export function FullCollectionMenu({ state }: Props) {
                     card={card}
                     ownedCount={ownedCounts.get(card.id) ?? 0}
                     locked={locked}
-                    onClick={locked ? undefined : () => setZoomedCard(card)}
+                    onClick={() => setZoomedCard(card)}
                   />
                 );
               })}
@@ -68,6 +68,7 @@ export function FullCollectionMenu({ state }: Props) {
         <CardZoomModal
           card={zoomedCard}
           ownedCount={ownedCounts.get(zoomedCard.id) ?? 0}
+          locked={!ownedCounts.has(zoomedCard.id)}
           onClose={() => setZoomedCard(null)}
         />
       )}
