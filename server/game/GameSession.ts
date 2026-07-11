@@ -1375,6 +1375,12 @@ export class GameSession {
         });
         return;
       }
+    } else if (player.pendingWorldId !== null) {
+      io.to(player.socketId).emit("error:message", {
+        message:
+          "Non puoi usare una figurina a effetto rapido mentre sei impegnato in un gioco su un'isola.",
+      });
+      return;
     }
 
     if (player.cardsUsedThisTurn.has(cardId)) {
