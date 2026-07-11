@@ -98,3 +98,11 @@ export const QUESTION_BANK: QuizQuestionInternal[] = [
 export function pickRandomQuestion(): QuizQuestionInternal {
   return QUESTION_BANK[Math.floor(Math.random() * QUESTION_BANK.length)];
 }
+
+export const QUESTION_CATEGORIES: string[] = [...new Set(QUESTION_BANK.map((q) => q.category))];
+
+export function pickRandomQuestionByCategory(category: string): QuizQuestionInternal {
+  const pool = QUESTION_BANK.filter((q) => q.category === category);
+  if (pool.length === 0) return pickRandomQuestion();
+  return pool[Math.floor(Math.random() * pool.length)];
+}

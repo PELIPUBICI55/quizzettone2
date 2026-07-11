@@ -15,14 +15,26 @@ import type {
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
 import { CARD_CATALOG, MAX_CARD_COPIES, pickRandomCards } from "../data/cards.js";
 import { PACKS } from "../data/packs.js";
-import { pickRandomQuestion, QuizQuestionInternal } from "../data/questions.js";
+import {
+  pickRandomQuestion,
+  pickRandomQuestionByCategory,
+  QUESTION_CATEGORIES,
+  QuizQuestionInternal,
+} from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
 interface PendingChoice {
-  kind: "stealCoins" | "swapPosition" | "discardCard" | "stealAllFromTwo" | "swapZeroTripleWin";
+  kind:
+    | "stealCoins"
+    | "swapPosition"
+    | "discardCard"
+    | "stealAllFromTwo"
+    | "swapZeroTripleWin"
+    | "chooseCategory"
+    | "forceSkipTurn";
   amount?: number;
   targets?: string[]; // bersagli già scelti, per le scelte a più passaggi
 }
@@ -54,6 +66,7 @@ interface InternalPlayer {
   pendingSurprise: SurpriseCardDef | null; // imprevisto pescato ma non ancora applicato
   pendingChoice: PendingChoice | null; // in attesa che scelga un bersaglio (giocatore/carta)
   cardsUsedThisTurn: Set<string>; // cardId già attivati in questo turno (una copia per nome a turno)
+  forcedNextCategory: string | null; // categoria scelta per il prossimo quiz (Nuvola)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
 }
 
@@ -127,6 +140,7 @@ export class GameSession {
       pendingChoice: null,
       pendingShieldContext: null,
       cardsUsedThisTurn: new Set(),
+      forcedNextCategory: null,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -255,6 +269,16 @@ export class GameSession {
     description?: string
   ) {
     player.statuses.push({ id: nextStatusId(), type, label, emoji, description });
+  }
+
+  // Controlla se il giocatore possiede (in collezione) una figurina con un
+  // determinato effetto passivo. Essendo le passive limitate a 1 copia, non
+  // serve contare quante ne ha: basta sapere se ce l'ha o no.
+  private hasPassiveEffect(player: InternalPlayer, type: CardEffectType): boolean {
+    return player.collection.some((owned) => {
+      const def = CARD_CATALOG.find((c) => c.id === owned.cardId);
+      return !!def?.effect.isPassive && def.effect.type === type;
+    });
   }
 
   // Controlla la collezione del giocatore per figurine con effetto passivo
@@ -669,17 +693,24 @@ export class GameSession {
         player.coins = Math.max(0, player.coins - (card.amount ?? 0));
         this.advanceTurnAndHandleSkips(io);
         break;
-      case "gainCoins":
-        player.coins += card.amount ?? 0;
+      case "gainCoins": {
+        const amount = this.hasPassiveEffect(player, "passiveDoubleImprevistoCoins")
+          ? (card.amount ?? 0) * 2
+          : card.amount ?? 0;
+        player.coins += amount;
         this.advanceTurnAndHandleSkips(io);
         break;
+      }
       case "stealCoins": {
         const others = [...this.players.values()].filter((p) => p.id !== player.id && p.connected);
         if (others.length === 0) {
           this.advanceTurnAndHandleSkips(io);
           break;
         }
-        player.pendingChoice = { kind: "stealCoins", amount: card.amount ?? 0 };
+        const amount = this.hasPassiveEffect(player, "passiveDoubleImprevistoCoins")
+          ? (card.amount ?? 0) * 2
+          : card.amount ?? 0;
+        player.pendingChoice = { kind: "stealCoins", amount };
         this.emitChoiceOptions(player, io);
         this.broadcastState(io);
         return;
@@ -787,7 +818,8 @@ export class GameSession {
       choice.kind === "stealCoins" ||
       choice.kind === "swapPosition" ||
       choice.kind === "stealAllFromTwo" ||
-      choice.kind === "swapZeroTripleWin"
+      choice.kind === "swapZeroTripleWin" ||
+      choice.kind === "forceSkipTurn"
     ) {
       const alreadyChosen = choice.targets ?? [];
       const options = [...this.players.values()]
@@ -803,6 +835,8 @@ export class GameSession {
             : "Scegli il 2° giocatore a cui rubare tutte le monete";
       } else if (choice.kind === "swapZeroTripleWin") {
         prompt = "Scegli con chi scambiare posizione e a cui azzerare le monete";
+      } else if (choice.kind === "forceSkipTurn") {
+        prompt = "Scegli chi salterà il prossimo turno";
       }
 
       io.to(player.socketId).emit("board:chooseTarget", { kind: "player", prompt, options });
@@ -814,6 +848,13 @@ export class GameSession {
       io.to(player.socketId).emit("board:chooseTarget", {
         kind: "card",
         prompt: "Scegli quale figurina scartare",
+        options,
+      });
+    } else if (choice.kind === "chooseCategory") {
+      const options = QUESTION_CATEGORIES.map((cat) => ({ id: cat, label: cat }));
+      io.to(player.socketId).emit("board:chooseTarget", {
+        kind: "category",
+        prompt: "Scegli la categoria del tuo prossimo gioco",
         options,
       });
     }
@@ -873,6 +914,39 @@ export class GameSession {
           }
         );
       }
+      this.broadcastState(io);
+      return;
+    }
+
+    if (choice.kind === "forceSkipTurn") {
+      player.pendingChoice = null;
+      const target = this.players.get(optionId);
+      if (target) {
+        this.maybeShield(
+          target,
+          `${player.name} vuole farti saltare il prossimo turno! Vuoi bloccarlo con uno scudo?`,
+          io,
+          (blocked) => {
+            if (!blocked) {
+              this.addStatus(
+                target,
+                "skipTurn",
+                "Salta prossimo turno",
+                "⏭️",
+                "All'inizio del tuo prossimo turno lo salterai automaticamente."
+              );
+            }
+            this.broadcastState(io);
+          }
+        );
+      }
+      this.broadcastState(io);
+      return;
+    }
+
+    if (choice.kind === "chooseCategory") {
+      player.pendingChoice = null;
+      player.forcedNextCategory = optionId;
       this.broadcastState(io);
       return;
     }
@@ -1043,7 +1117,10 @@ export class GameSession {
   }
 
   private sendNewQuestion(player: InternalPlayer, io: IOServer) {
-    const question = { ...pickRandomQuestion() };
+    const question = player.forcedNextCategory
+      ? { ...pickRandomQuestionByCategory(player.forcedNextCategory) }
+      : { ...pickRandomQuestion() };
+    player.forcedNextCategory = null;
     let eliminatedOptionIndex: number | undefined;
 
     if (player.activeEffects.includes("extraTime")) {
@@ -1253,6 +1330,73 @@ export class GameSession {
       }
       player.pendingChoice = { kind: "swapZeroTripleWin" };
       this.emitChoiceOptions(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "chooseNextCategory") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      player.pendingChoice = { kind: "chooseCategory" };
+      this.emitChoiceOptions(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "forceSkipTurn") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      );
+      if (others.length === 0) {
+        this.broadcastState(io);
+        return;
+      }
+      player.pendingChoice = { kind: "forceSkipTurn" };
+      this.emitChoiceOptions(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "gainThreeShields") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      for (let i = 0; i < 3; i++) {
+        this.addStatus(
+          player,
+          "shield",
+          "Scudo",
+          "🛡️",
+          "Puoi annullare un effetto subito in futuro. Si consuma dopo l'uso."
+        );
+      }
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "moveAllToCittadella") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      );
+      for (const opp of others) {
+        this.maybeShield(
+          opp,
+          `${player.name} vuole spostarti alla Cittadella! Vuoi bloccarlo con uno scudo?`,
+          io,
+          (blocked) => {
+            if (!blocked) {
+              opp.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
+              this.resolveArrival(opp, CITTADELLA_ID, io);
+            }
+            this.broadcastState(io);
+          }
+        );
+      }
       this.broadcastState(io);
       return;
     }

@@ -87,6 +87,62 @@ export const CARD_CATALOG: CardDef[] = (() => {
         isQuickEffect: true,
       },
     },
+    "card-4": {
+      name: "Nuvola",
+      image: "/cards/nuvola.webp",
+      description:
+        "Nonostante sia albanese, non capisce se gli dici sciarop. Ha più anni che neuroni, ma gli si vuole bene lo stesso.",
+      effect: {
+        type: "chooseNextCategory",
+        label: "Effetto rapido: scegli la categoria del tuo prossimo gioco",
+        isQuickEffect: true,
+      },
+    },
+    "card-5": {
+      name: "Geoffrey",
+      image: "/cards/geoffrey.webp",
+      description:
+        "Qualcuno ha detto coccole? Qualcuno ha detto obeso? Qualcuno ha detto meooow? Fagli un po' di coccole e sarà il tuo migliore amico.",
+      effect: {
+        type: "passiveDoubleImprevistoCoins",
+        label: "Effetto continuo: raddoppia ogni imprevisto che ti fa guadagnare o rubare monete",
+        isQuickEffect: false,
+        isPassive: true,
+      },
+    },
+    "card-6": {
+      name: "Bandar Seri Begawan",
+      image: "/cards/bandar-seri-begawan.webp",
+      description:
+        "Prepotente, stronzo, stinfio. Decide lui se puoi toccarlo, quando puoi toccarlo e per quanto tempo.. ma che bello che è.",
+      effect: {
+        type: "forceSkipTurn",
+        label: "Fai saltare il prossimo turno a un giocatore a scelta",
+        isQuickEffect: false,
+      },
+    },
+    "card-7": {
+      name: "Fabio",
+      image: "/cards/fabio.webp",
+      description:
+        "Dolcissimo gattino che ha paura anche della propria ombra. Come hai detto fabietto? L'aspirapolvere è uno strumento del diavolo? Ma no schiocchino!",
+      effect: {
+        type: "gainThreeShields",
+        label: "Guadagna 3 scudi",
+        isQuickEffect: false,
+      },
+    },
+    "card-8": {
+      name: "Gino",
+      image: "/cards/gino.webp",
+      description:
+        "Soprannominato anche \"L'allievo di MadMarco\". Non ha un rank su Overwatch per scelta, ma sarebbe senza dubbio master. Non sbaglia mai il momento di pushare.",
+      effect: {
+        type: "moveAllToCittadella",
+        label: "Sposta tutti gli avversari alla Cittadella",
+        isQuickEffect: false,
+      },
+    },
   };
 
   return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));

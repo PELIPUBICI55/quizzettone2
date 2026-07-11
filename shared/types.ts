@@ -30,7 +30,12 @@ export type CardEffectType =
   | "skipQuestion" // salta la domanda corrente e ne pesca subito un'altra
   | "passiveFreeChest" // passivo: dopo ogni gioco a cui partecipi, ricevi lo status "baule gratis"
   | "stealAllFromTwo" // ruba tutte le monete a 2 giocatori scelti
-  | "swapZeroTripleWin"; // scambia posizione con un giocatore a scelta, gli azzera le monete, triplica la tua prossima vincita
+  | "swapZeroTripleWin" // scambia posizione con un giocatore a scelta, gli azzera le monete, triplica la tua prossima vincita
+  | "chooseNextCategory" // scegli la categoria del tuo prossimo gioco
+  | "passiveDoubleImprevistoCoins" // passivo: raddoppia le monete guadagnate/rubate dagli imprevisti
+  | "forceSkipTurn" // fai saltare il prossimo turno a un giocatore a scelta
+  | "gainThreeShields" // guadagna 3 scudi
+  | "moveAllToCittadella"; // sposta tutti gli avversari alla Cittadella
 
 export interface CardEffectDef {
   type: CardEffectType;
@@ -202,7 +207,7 @@ export interface SurpriseDrawnPayload {
   effectLabel: string;
 }
 
-export type ChoiceKind = "player" | "card";
+export type ChoiceKind = "player" | "card" | "category";
 
 export interface ChoiceOption {
   id: string;
