@@ -72,6 +72,18 @@ export const CARD_CATALOG: CardDef[] = (() => {
         isQuickEffect: false,
       },
     },
+    "card-3": {
+      name: "Davide la tartaruga",
+      image: "/cards/davide-la-tartaruga.webp",
+      description:
+        "Ha un animo calmo e gentile, ma si arrabbia facilmente quando perde ai videogiochi. Non conosce quali giochi hanno avuto candidature GOTY.",
+      effect: {
+        type: "swapZeroTripleWin",
+        label:
+          "Effetto rapido: scambiati di posizione con un giocatore a scelta, azzera le sue monete e triplica la tua prossima vincita",
+        isQuickEffect: true,
+      },
+    },
   };
 
   return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));

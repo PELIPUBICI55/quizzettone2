@@ -21,7 +21,7 @@ import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../sha
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
 interface PendingChoice {
-  kind: "stealCoins" | "swapPosition" | "discardCard" | "stealAllFromTwo";
+  kind: "stealCoins" | "swapPosition" | "discardCard" | "stealAllFromTwo" | "swapZeroTripleWin";
   amount?: number;
   targets?: string[]; // bersagli già scelti, per le scelte a più passaggi
 }
@@ -782,7 +782,12 @@ export class GameSession {
     const choice = player.pendingChoice;
     if (!choice) return;
 
-    if (choice.kind === "stealCoins" || choice.kind === "swapPosition" || choice.kind === "stealAllFromTwo") {
+    if (
+      choice.kind === "stealCoins" ||
+      choice.kind === "swapPosition" ||
+      choice.kind === "stealAllFromTwo" ||
+      choice.kind === "swapZeroTripleWin"
+    ) {
       const alreadyChosen = choice.targets ?? [];
       const options = [...this.players.values()]
         .filter((p) => p.id !== player.id && p.connected && !alreadyChosen.includes(p.id))
@@ -795,6 +800,8 @@ export class GameSession {
           alreadyChosen.length === 0
             ? "Scegli il 1° giocatore a cui rubare tutte le monete"
             : "Scegli il 2° giocatore a cui rubare tutte le monete";
+      } else if (choice.kind === "swapZeroTripleWin") {
+        prompt = "Scegli con chi scambiare posizione e a cui azzerare le monete";
       }
 
       io.to(player.socketId).emit("board:chooseTarget", { kind: "player", prompt, options });
@@ -814,7 +821,6 @@ export class GameSession {
   submitChoice(playerId: string, optionId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player || !player.pendingChoice) return;
-    if (this.currentTurnPlayerId() !== playerId) return;
 
     const choice = player.pendingChoice;
 
@@ -837,7 +843,35 @@ export class GameSession {
         const target = this.players.get(targetId);
         if (target) this.stealAllWithShieldCheck(player, target, io);
       }
-      this.advanceTurnAndHandleSkips(io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (choice.kind === "swapZeroTripleWin") {
+      player.pendingChoice = null;
+      const target = this.players.get(optionId);
+      if (target) {
+        // il beneficio per chi usa la carta è garantito, a prescindere dallo scudo del bersaglio
+        this.addStatus(
+          player,
+          "tripleWin",
+          "Vincita triplicata",
+          "🔺",
+          "Il prossimo gioco vinto in un mondo pagherà il triplo delle monete."
+        );
+        this.maybeShield(
+          target,
+          `${player.name} vuole scambiarsi di posizione con te e azzerarti le monete! Vuoi bloccarlo con uno scudo?`,
+          io,
+          (blocked) => {
+            if (!blocked) {
+              this.swapPositions(player, target);
+              target.coins = 0;
+            }
+            this.broadcastState(io);
+          }
+        );
+      }
       this.broadcastState(io);
       return;
     }
@@ -1084,11 +1118,16 @@ export class GameSession {
       (e) => e !== "secondChance" && e !== "doubleCoins"
     );
 
-    // status da imprevisto che raddoppiano/dimezzano la vincita di questo gioco
+    // status da imprevisto/carte che moltiplicano la vincita di questo gioco
     const doubleIdx = player.statuses.findIndex((s) => s.type === "doubleWin");
     if (doubleIdx !== -1) {
       coinsAwarded *= 2;
       player.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = player.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      coinsAwarded *= 3;
+      player.statuses.splice(tripleIdx, 1);
     }
     const halveIdx = player.statuses.findIndex((s) => s.type === "halveWin");
     if (halveIdx !== -1) {
@@ -1181,6 +1220,23 @@ export class GameSession {
         return;
       }
       player.pendingChoice = { kind: "stealAllFromTwo", targets: [] };
+      this.emitChoiceOptions(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "swapZeroTripleWin") {
+      instance.used = true;
+      player.cardsUsedThisTurn.add(cardId);
+
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      );
+      if (others.length === 0) {
+        this.broadcastState(io);
+        return;
+      }
+      player.pendingChoice = { kind: "swapZeroTripleWin" };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;

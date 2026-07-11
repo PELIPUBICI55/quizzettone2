@@ -29,7 +29,8 @@ export type CardEffectType =
   | "secondChance" // se sbagli, ti da comunque meta monete invece di zero
   | "skipQuestion" // salta la domanda corrente e ne pesca subito un'altra
   | "passiveFreeChest" // passivo: dopo ogni gioco a cui partecipi, ricevi lo status "baule gratis"
-  | "stealAllFromTwo"; // ruba tutte le monete a 2 giocatori scelti
+  | "stealAllFromTwo" // ruba tutte le monete a 2 giocatori scelti
+  | "swapZeroTripleWin"; // scambia posizione con un giocatore a scelta, gli azzera le monete, triplica la tua prossima vincita
 
 export interface CardEffectDef {
   type: CardEffectType;
@@ -75,7 +76,14 @@ export interface BoardPosition {
 
 export type PawnToken = "hat" | "car" | "dog" | "boot" | "ship" | "wheelbarrow";
 
-export type StatusType = "skipTurn" | "freePack" | "freeChest" | "doubleWin" | "halveWin" | "shield";
+export type StatusType =
+  | "skipTurn"
+  | "freePack"
+  | "freeChest"
+  | "doubleWin"
+  | "halveWin"
+  | "tripleWin"
+  | "shield";
 
 export interface PlayerStatus {
   id: string;
