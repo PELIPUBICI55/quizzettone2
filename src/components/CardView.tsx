@@ -6,6 +6,7 @@ interface Props {
   locked?: boolean;
   spent?: boolean; // possiedi la carta ma l'effetto è già stato attivato
   onUse?: () => void;
+  onClick?: () => void;
 }
 
 const RARITY_TITLES: Record<CardDef["rarity"], string> = {
@@ -15,9 +16,13 @@ const RARITY_TITLES: Record<CardDef["rarity"], string> = {
   leggendaria: "Figurina Leggendaria",
 };
 
-export function CardView({ card, ownedCount, locked, spent, onUse }: Props) {
+export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Props) {
   return (
-    <div className={`tcg-card rarity-${card.rarity}${locked ? " locked" : ""}`} title={card.effect.label}>
+    <div
+      className={`tcg-card rarity-${card.rarity}${locked ? " locked" : ""}`}
+      title={card.effect.label}
+      onClick={onClick}
+    >
       {!locked && card.effect.isQuickEffect && (
         <span className="quick-badge" title="Effetto rapido: usabile in qualsiasi momento">
           ⚡
@@ -42,9 +47,12 @@ export function CardView({ card, ownedCount, locked, spent, onUse }: Props) {
 
       {onUse && !locked && !spent && (
         <button
-          className="btn-outline"
+          className="btn-outline use-btn"
           style={{ fontSize: "0.7rem", padding: "0.35rem" }}
-          onClick={onUse}
+          onClick={(e) => {
+            e.stopPropagation();
+            onUse();
+          }}
         >
           Attiva effetto
         </button>

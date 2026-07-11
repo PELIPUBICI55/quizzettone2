@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { GameStateSnapshot } from "../../shared/types";
+import type { CardDef, GameStateSnapshot } from "../../shared/types";
 import { CardView } from "./CardView";
+import { CardZoomModal } from "./CardZoomModal";
 import { socket } from "../socket";
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 
 export function CollectionMenu({ state }: Props) {
   const [open, setOpen] = useState(false);
+  const [zoomedCard, setZoomedCard] = useState<CardDef | null>(null);
 
   const ownedCounts = new Map<string, number>();
   const availableCounts = new Map<string, number>();
@@ -63,6 +65,7 @@ export function CollectionMenu({ state }: Props) {
                       ownedCount={ownedCounts.get(card.id) ?? 0}
                       spent={isSpent}
                       onUse={canQuickUse ? () => socket.emit("card:use", { cardId: card.id }) : undefined}
+                      onClick={() => setZoomedCard(card)}
                     />
                   );
                 })}
@@ -70,6 +73,15 @@ export function CollectionMenu({ state }: Props) {
             )}
           </div>
         </>
+      )}
+
+      {zoomedCard && (
+        <CardZoomModal
+          card={zoomedCard}
+          ownedCount={ownedCounts.get(zoomedCard.id) ?? 0}
+          spent={(availableCounts.get(zoomedCard.id) ?? 0) === 0}
+          onClose={() => setZoomedCard(null)}
+        />
       )}
     </div>
   );

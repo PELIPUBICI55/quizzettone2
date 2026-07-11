@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { GameStateSnapshot } from "../../shared/types";
+import type { CardDef, GameStateSnapshot } from "../../shared/types";
 import { CardView } from "./CardView";
+import { CardZoomModal } from "./CardZoomModal";
 
 interface Props {
   state: GameStateSnapshot;
@@ -8,6 +9,7 @@ interface Props {
 
 export function FullCollectionMenu({ state }: Props) {
   const [open, setOpen] = useState(false);
+  const [zoomedCard, setZoomedCard] = useState<CardDef | null>(null);
 
   const ownedCounts = new Map<string, number>();
   for (const owned of state.me.collection) {
@@ -45,17 +47,29 @@ export function FullCollectionMenu({ state }: Props) {
               Le figurine che ti mancano sono oscurate.
             </p>
             <div className="card-grid">
-              {state.cardCatalog.map((card) => (
-                <CardView
-                  key={card.id}
-                  card={card}
-                  ownedCount={ownedCounts.get(card.id) ?? 0}
-                  locked={!ownedCounts.has(card.id)}
-                />
-              ))}
+              {state.cardCatalog.map((card) => {
+                const locked = !ownedCounts.has(card.id);
+                return (
+                  <CardView
+                    key={card.id}
+                    card={card}
+                    ownedCount={ownedCounts.get(card.id) ?? 0}
+                    locked={locked}
+                    onClick={locked ? undefined : () => setZoomedCard(card)}
+                  />
+                );
+              })}
             </div>
           </div>
         </>
+      )}
+
+      {zoomedCard && (
+        <CardZoomModal
+          card={zoomedCard}
+          ownedCount={ownedCounts.get(zoomedCard.id) ?? 0}
+          onClose={() => setZoomedCard(null)}
+        />
       )}
     </div>
   );
