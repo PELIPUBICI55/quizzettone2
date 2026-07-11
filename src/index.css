@@ -561,15 +561,6 @@ input {
   box-shadow: 0 6px 16px rgba(90, 169, 230, 0.25);
 }
 
-.tcg-card.rarity-rara .name {
-  background: linear-gradient(90deg, #d4af37 0%, #fff8dc 50%, #d4af37 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: text-shine 2.2s linear infinite;
-}
-
 .tcg-card.rarity-epica {
   border-color: #b06bf2;
   background: linear-gradient(160deg, #8a4fc9, #2c1447);
@@ -581,9 +572,9 @@ input {
   position: absolute;
   inset: 0;
   border-radius: 11px;
-  background: linear-gradient(115deg, transparent 15%, rgba(255, 255, 255, 0.25) 50%, transparent 85%);
+  background: linear-gradient(115deg, transparent 5%, rgba(255, 255, 255, 0.45) 50%, transparent 95%);
   background-size: 260% 260%;
-  animation: card-shine 4.5s ease-in-out infinite;
+  animation: card-shine 3.6s ease-in-out infinite;
   mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 1;
@@ -595,8 +586,28 @@ input {
   box-shadow: 0 0 18px rgba(212, 175, 55, 0.55);
 }
 
-.tcg-card.rarity-leggendaria .name {
-  color: #2a1508;
+/* effetto luce sul nome: oro chiaro per rare/epiche, scuro per le
+   leggendarie (dove il fondo carta è già dorato e chiaro) */
+.tcg-card.rarity-rara .name,
+.tcg-card.rarity-epica .name,
+.tcg-card.rarity-rara .rarity-title .shine-text,
+.tcg-card.rarity-epica .rarity-title .shine-text {
+  background: linear-gradient(90deg, #d4af37 0%, #fff8dc 50%, #d4af37 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shine 2.2s linear infinite;
+}
+
+.tcg-card.rarity-leggendaria .name,
+.tcg-card.rarity-leggendaria .rarity-title .shine-text {
+  background: linear-gradient(90deg, #2a1508 0%, #6b4423 50%, #2a1508 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shine 2.2s linear infinite;
 }
 
 .prism {

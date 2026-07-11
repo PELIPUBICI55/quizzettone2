@@ -19,15 +19,30 @@ const RARITY_TITLES: Record<CardDef["rarity"], string> = {
 // posizioni fisse dei prismi di luce (solo figurine leggendarie), per non
 // farli "saltare" in giro ad ogni nuovo render
 const PRISM_SPOTS = [
-  { top: "8%", left: "14%", size: 11, rot: 12, delay: 0 },
-  { top: "14%", left: "68%", size: 15, rot: -18, delay: 0.3 },
-  { top: "28%", left: "38%", size: 9, rot: 40, delay: 0.9 },
-  { top: "40%", left: "82%", size: 13, rot: -8, delay: 1.4 },
-  { top: "48%", left: "18%", size: 12, rot: 28, delay: 0.6 },
-  { top: "58%", left: "58%", size: 17, rot: -32, delay: 1.8 },
-  { top: "70%", left: "30%", size: 10, rot: 55, delay: 1.1 },
-  { top: "78%", left: "72%", size: 12, rot: -22, delay: 2.1 },
-  { top: "88%", left: "48%", size: 9, rot: 18, delay: 0.4 },
+  { top: "5%", left: "10%", size: 10, rot: 12, delay: 0 },
+  { top: "6%", left: "42%", size: 8, rot: -25, delay: 0.5 },
+  { top: "8%", left: "75%", size: 13, rot: 30, delay: 1.1 },
+  { top: "16%", left: "25%", size: 9, rot: -15, delay: 1.6 },
+  { top: "18%", left: "60%", size: 15, rot: 45, delay: 0.2 },
+  { top: "22%", left: "90%", size: 8, rot: -35, delay: 0.9 },
+  { top: "28%", left: "8%", size: 12, rot: 20, delay: 1.9 },
+  { top: "30%", left: "48%", size: 9, rot: -10, delay: 0.4 },
+  { top: "36%", left: "78%", size: 14, rot: 38, delay: 1.3 },
+  { top: "42%", left: "20%", size: 8, rot: -28, delay: 0.7 },
+  { top: "44%", left: "62%", size: 11, rot: 15, delay: 2.1 },
+  { top: "50%", left: "35%", size: 9, rot: -42, delay: 0.3 },
+  { top: "52%", left: "88%", size: 13, rot: 22, delay: 1.5 },
+  { top: "58%", left: "12%", size: 10, rot: -18, delay: 1.0 },
+  { top: "60%", left: "55%", size: 16, rot: 33, delay: 0.6 },
+  { top: "66%", left: "75%", size: 8, rot: -30, delay: 1.8 },
+  { top: "70%", left: "30%", size: 11, rot: 50, delay: 0.1 },
+  { top: "74%", left: "68%", size: 9, rot: -20, delay: 1.2 },
+  { top: "78%", left: "18%", size: 13, rot: 26, delay: 2.0 },
+  { top: "82%", left: "48%", size: 8, rot: -38, delay: 0.8 },
+  { top: "86%", left: "82%", size: 12, rot: 18, delay: 1.4 },
+  { top: "90%", left: "32%", size: 9, rot: -24, delay: 0.5 },
+  { top: "92%", left: "60%", size: 14, rot: 40, delay: 1.7 },
+  { top: "94%", left: "8%", size: 8, rot: -12, delay: 2.2 },
 ];
 
 export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Props) {
@@ -68,7 +83,9 @@ export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Pr
         <span className="emoji">{card.emoji}</span>
       </div>
 
-      <div className="rarity-title">{RARITY_TITLES[card.rarity]}</div>
+      <div className="rarity-title">
+        <span className="shine-text">{RARITY_TITLES[card.rarity]}</span>
+      </div>
 
       {!locked && (
         <div className="description">
