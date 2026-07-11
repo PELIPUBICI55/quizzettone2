@@ -24,6 +24,7 @@ import { TurnOrderReveal } from "./screens/TurnOrderReveal";
 import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
 import { CollectionMenu } from "./components/CollectionMenu";
+import { FullCollectionMenu } from "./components/FullCollectionMenu";
 import { PartyMenu } from "./components/PartyMenu";
 import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
@@ -224,6 +225,7 @@ export default function App() {
         <PartyMenu state={state} />
         <StatusMenu state={state} />
         <CollectionMenu state={state} />
+        <FullCollectionMenu state={state} />
       </div>
 
       <div className="main-area">
@@ -265,9 +267,6 @@ export default function App() {
             <QuizMinigame
               payload={quizPayload}
               result={quizResult}
-              myCollection={state.me.collection}
-              cardCatalog={state.cardCatalog}
-              onUseCard={(cardId) => socket.emit("card:use", { cardId })}
               onClose={closeQuiz}
             />
           ) : (

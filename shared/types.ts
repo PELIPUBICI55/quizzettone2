@@ -33,6 +33,7 @@ export interface CardEffectDef {
   type: CardEffectType;
   value?: number;
   label: string; // descrizione leggibile, es. "+10 secondi al timer"
+  isQuickEffect: boolean; // se true: usabile in qualsiasi momento, anche nel turno altrui
 }
 
 export type CardRarity = "comune" | "rara" | "epica" | "leggendaria";
@@ -43,6 +44,7 @@ export interface CardDef {
   worldId: WorldId; // mondo/tema di appartenenza (influenza grafica e drop rate)
   rarity: CardRarity;
   emoji: string;
+  description: string; // testo narrativo mostrato sulla carta, sopra l'effetto
   effect: CardEffectDef;
 }
 

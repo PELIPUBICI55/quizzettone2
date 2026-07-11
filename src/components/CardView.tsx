@@ -8,29 +8,42 @@ interface Props {
   onUse?: () => void;
 }
 
+const RARITY_TITLES: Record<CardDef["rarity"], string> = {
+  comune: "Figurina Comune",
+  rara: "Figurina Rara",
+  epica: "Figurina Epica",
+  leggendaria: "Figurina Leggendaria",
+};
+
 export function CardView({ card, ownedCount, locked, spent, onUse }: Props) {
   return (
-    <div
-      className={`tcg-card${locked ? " locked" : ""}`}
-      title={card.effect.label}
-    >
-      <span className="rarity">{card.rarity}</span>
-      <div className="emoji">{card.emoji}</div>
-      <div>
-        <div className="name">{card.name}</div>
-        {!locked && (
-          <div className="effect">
-            {spent ? "Effetto già usato" : card.effect.label}
-          </div>
-        )}
-      </div>
-      {!!ownedCount && ownedCount > 1 && (
-        <span className="owned-count">×{ownedCount}</span>
+    <div className={`tcg-card rarity-${card.rarity}${locked ? " locked" : ""}`} title={card.effect.label}>
+      {!locked && card.effect.isQuickEffect && (
+        <span className="quick-badge" title="Effetto rapido: usabile in qualsiasi momento">
+          ⚡
+        </span>
       )}
+
+      <div className="name">{card.name}</div>
+
+      <div className="illustration">
+        <span className="emoji">{card.emoji}</span>
+      </div>
+
+      <div className="rarity-title">{RARITY_TITLES[card.rarity]}</div>
+
+      {!locked && (
+        <div className="description">
+          {card.description} <strong>{spent ? "Effetto già usato." : card.effect.label + "."}</strong>
+        </div>
+      )}
+
+      {!!ownedCount && ownedCount > 1 && <span className="owned-count">×{ownedCount}</span>}
+
       {onUse && !locked && !spent && (
         <button
           className="btn-outline"
-          style={{ marginTop: "0.5rem", fontSize: "0.75rem", padding: "0.4rem" }}
+          style={{ fontSize: "0.7rem", padding: "0.35rem" }}
           onClick={onUse}
         >
           Attiva effetto

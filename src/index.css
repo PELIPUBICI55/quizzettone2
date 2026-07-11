@@ -537,48 +537,109 @@ input {
 }
 
 .tcg-card {
-  aspect-ratio: 3 / 4.2;
-  border-radius: 12px;
-  padding: 0.7rem;
+  aspect-ratio: 3 / 4.6;
+  border-radius: 14px;
+  padding: 0.55rem;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  border: 2px solid var(--gold);
+  gap: 0.35rem;
+  border: 3px solid var(--gold);
   background: linear-gradient(160deg, var(--panel-raised), var(--panel));
   position: relative;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.tcg-card.rarity-comune {
+  border-color: #9a9a9a;
+}
+.tcg-card.rarity-rara {
+  border-color: #5aa9e6;
+  box-shadow: 0 6px 16px rgba(90, 169, 230, 0.25);
+}
+.tcg-card.rarity-epica {
+  border-color: #b06bf2;
+  box-shadow: 0 6px 18px rgba(176, 107, 242, 0.35);
+}
+.tcg-card.rarity-leggendaria {
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.55);
 }
 
 .tcg-card.locked {
-  opacity: 0.28;
+  opacity: 0.32;
   filter: grayscale(1);
   border-color: rgba(255, 255, 255, 0.15);
-}
-
-.tcg-card .rarity {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--gold-soft);
-}
-
-.tcg-card .emoji {
-  font-size: 2.1rem;
-  text-align: center;
+  box-shadow: none;
 }
 
 .tcg-card .name {
-  font-size: 0.85rem;
-  font-weight: 700;
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  color: var(--gold-soft);
+  text-align: center;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tcg-card .effect {
-  font-size: 0.68rem;
+.tcg-card .illustration {
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.12), transparent 70%),
+    linear-gradient(160deg, var(--panel-raised), var(--bg-deep));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tcg-card .illustration .emoji {
+  font-size: 2.4rem;
+}
+
+.tcg-card .rarity-title {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cream);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 5px;
+  padding: 0.15rem 0.3rem;
+}
+
+.tcg-card .description {
+  font-size: 0.62rem;
+  line-height: 1.3;
   color: var(--text-muted);
-  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.tcg-card .description strong {
+  color: var(--gold-soft);
+}
+
+.tcg-card .quick-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffe9a8, #c9a227);
+  border: 2px solid #1a0f10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 2;
 }
 
 .tcg-card .owned-count {
@@ -591,6 +652,7 @@ input {
   font-size: 0.7rem;
   border-radius: 999px;
   padding: 0.1rem 0.45rem;
+  z-index: 2;
 }
 
 .pack-row {

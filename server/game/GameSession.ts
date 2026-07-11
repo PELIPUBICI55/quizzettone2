@@ -1014,6 +1014,19 @@ export class GameSession {
     this.broadcastState(io);
   }
 
+  private isReadyToRoll(player: InternalPlayer): boolean {
+    return (
+      player.pendingRoll === null &&
+      !player.pendingShop &&
+      !player.pendingQuestion &&
+      !player.pendingSurprise &&
+      !player.pendingChoice &&
+      !player.pendingShieldContext &&
+      !player.awaitingWheelStart &&
+      !player.awaitingQuizStart
+    );
+  }
+
   useCard(playerId: string, cardId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
@@ -1028,6 +1041,17 @@ export class GameSession {
     }
     const cardDef = CARD_CATALOG.find((c) => c.id === cardId);
     if (!cardDef) return;
+
+    if (!cardDef.effect.isQuickEffect) {
+      const isMyTurn = this.currentTurnPlayerId() === playerId;
+      if (!isMyTurn || !this.isReadyToRoll(player)) {
+        io.to(player.socketId).emit("error:message", {
+          message:
+            "Questa carta non ha effetto rapido: puoi usarla solo nel tuo turno, prima di tirare il dado.",
+        });
+        return;
+      }
+    }
 
     // la carta resta nella collezione ma non è più riutilizzabile
     instance.used = true;

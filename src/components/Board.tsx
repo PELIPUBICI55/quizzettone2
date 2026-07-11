@@ -3,6 +3,7 @@ import type { BoardPosition, GameStateSnapshot } from "../../shared/types";
 import { neighborsOf } from "../../shared/board";
 import { socket } from "../socket";
 import { BoardScene3D } from "./BoardScene3D";
+import { CardView } from "./CardView";
 
 interface Props {
   state: GameStateSnapshot;
@@ -28,6 +29,20 @@ export function Board({ state }: Props) {
 
   const rollDice = () => socket.emit("board:roll");
   const confirmMove = (direction?: string) => socket.emit("board:confirmMove", { direction });
+
+  // carte NON rapide utilizzabili solo ora, prima di tirare il dado
+  const cardsById = new Map(state.cardCatalog.map((c) => [c.id, c]));
+  const preRollCardIds =
+    myTurn && state.me.pendingRoll === null
+      ? [
+          ...new Set(
+            state.me.collection
+              .filter((c) => !c.used)
+              .map((c) => c.cardId)
+              .filter((id) => !cardsById.get(id)?.effect.isQuickEffect)
+          ),
+        ]
+      : [];
 
   return (
     <div>
@@ -66,6 +81,27 @@ export function Board({ state }: Props) {
               Avanza di {state.me.pendingRoll} caselle
             </button>
           )}
+        </div>
+      )}
+
+      {preRollCardIds.length > 0 && (
+        <div className="panel" style={{ marginBottom: "1rem" }}>
+          <h3 style={{ marginTop: 0, textAlign: "center" }}>
+            Attiva una figurina prima di tirare il dado
+          </h3>
+          <div className="card-grid">
+            {preRollCardIds.map((id) => {
+              const card = cardsById.get(id);
+              if (!card) return null;
+              return (
+                <CardView
+                  key={id}
+                  card={card}
+                  onUse={() => socket.emit("card:use", { cardId: id })}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 

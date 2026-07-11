@@ -2,11 +2,11 @@ import type { CardDef, CardEffectDef, CardRarity } from "../../shared/types.js";
 import { WORLDS } from "./worlds.js";
 
 const EFFECTS: CardEffectDef[] = [
-  { type: "extraTime", value: 10, label: "+10 secondi al timer" },
-  { type: "removeWrongOption", label: "Elimina una risposta sbagliata" },
-  { type: "doubleCoins", label: "Raddoppia le monete della prossima vittoria" },
-  { type: "secondChance", label: "Se sbagli, ricevi comunque metà monete" },
-  { type: "skipQuestion", label: "Salta la domanda e pescane un'altra" },
+  { type: "extraTime", value: 10, label: "+10 secondi al timer", isQuickEffect: false },
+  { type: "removeWrongOption", label: "Elimina una risposta sbagliata", isQuickEffect: false },
+  { type: "doubleCoins", label: "Raddoppia le monete della prossima vittoria", isQuickEffect: false },
+  { type: "secondChance", label: "Se sbagli, ricevi comunque metà monete", isQuickEffect: false },
+  { type: "skipQuestion", label: "Salta la domanda e pescane un'altra", isQuickEffect: false },
 ];
 
 // Esattamente 25 carte in totale, con questa distribuzione di rarità.
@@ -33,6 +33,8 @@ export const CARD_CATALOG: CardDef[] = (() => {
         worldId: world.id,
         rarity,
         emoji: world.emoji,
+        // testo placeholder: verrà personalizzato in seguito carta per carta
+        description: `Un manufatto legato al mondo di ${world.name}, la cui origine resta ancora un mistero.`,
         effect,
       });
       globalIndex++;

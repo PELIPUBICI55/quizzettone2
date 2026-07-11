@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { GameStateSnapshot } from "../../shared/types";
 import { CardView } from "./CardView";
+import { socket } from "../socket";
 
 interface Props {
   state: GameStateSnapshot;
@@ -52,14 +53,19 @@ export function CollectionMenu({ state }: Props) {
               </p>
             ) : (
               <div className="card-grid">
-                {foundCards.map((card) => (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    ownedCount={ownedCounts.get(card.id) ?? 0}
-                    spent={(availableCounts.get(card.id) ?? 0) === 0}
-                  />
-                ))}
+                {foundCards.map((card) => {
+                  const isSpent = (availableCounts.get(card.id) ?? 0) === 0;
+                  const canQuickUse = card.effect.isQuickEffect && !isSpent;
+                  return (
+                    <CardView
+                      key={card.id}
+                      card={card}
+                      ownedCount={ownedCounts.get(card.id) ?? 0}
+                      spent={isSpent}
+                      onUse={canQuickUse ? () => socket.emit("card:use", { cardId: card.id }) : undefined}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

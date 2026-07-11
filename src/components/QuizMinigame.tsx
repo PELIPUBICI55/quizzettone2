@@ -1,20 +1,10 @@
 import { useEffect, useState } from "react";
-import type {
-  CardDef,
-  CardEffectType,
-  OwnedCard,
-  QuizQuestionPayload,
-  QuizResultPayload,
-} from "../../shared/types";
+import type { CardEffectType, QuizQuestionPayload, QuizResultPayload } from "../../shared/types";
 import { socket } from "../socket";
-import { CardView } from "./CardView";
 
 interface Props {
   payload: QuizQuestionPayload;
   result: QuizResultPayload | null;
-  myCollection: OwnedCard[];
-  cardCatalog: CardDef[];
-  onUseCard: (cardId: string) => void;
   onClose: () => void;
 }
 
@@ -26,14 +16,7 @@ const EFFECT_LABELS: Record<CardEffectType, string> = {
   skipQuestion: "Salta domanda",
 };
 
-export function QuizMinigame({
-  payload,
-  result,
-  myCollection,
-  cardCatalog,
-  onUseCard,
-  onClose,
-}: Props) {
+export function QuizMinigame({ payload, result, onClose }: Props) {
   const { question, activeEffects, eliminatedOptionIndex } = payload;
   const [selected, setSelected] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(question.timeLimitSec);
@@ -58,13 +41,6 @@ export function QuizMinigame({
     setSelected(index);
     socket.emit("quiz:answer", { questionId: question.id, answerIndex: index });
   };
-
-  // carte in mano utilizzabili durante questa domanda: solo quelle con
-  // almeno una copia il cui effetto non è ancora stato attivato
-  const usableCardIds = [
-    ...new Set(myCollection.filter((c) => !c.used).map((c) => c.cardId)),
-  ];
-  const cardsById = new Map(cardCatalog.map((c) => [c.id, c]));
 
   return (
     <div className="quiz-card">
@@ -131,21 +107,6 @@ export function QuizMinigame({
           </p>
         )}
       </div>
-
-      {!result && usableCardIds.length > 0 && (
-        <>
-          <h3 className="section-title">Usa una carta in questa domanda</h3>
-          <div className="card-grid">
-            {usableCardIds.map((id) => {
-              const card = cardsById.get(id);
-              if (!card) return null;
-              return (
-                <CardView key={id} card={card} onUse={() => onUseCard(id)} />
-              );
-            })}
-          </div>
-        </>
-      )}
     </div>
   );
 }
