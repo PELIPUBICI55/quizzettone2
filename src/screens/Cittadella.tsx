@@ -8,13 +8,13 @@ interface Props {
 function PackTile({
   pack,
   canAfford,
-  freePacksAvailable,
+  freeAvailable,
 }: {
   pack: PackDef;
   canAfford: boolean;
-  freePacksAvailable: number;
+  freeAvailable: number;
 }) {
-  const isFree = pack.id === "pack-base" && freePacksAvailable > 0;
+  const isFree = freeAvailable > 0;
 
   return (
     <div className="panel pack-card">
@@ -29,8 +29,11 @@ function PackTile({
       </p>
       {isFree && (
         <p style={{ fontSize: "0.75rem", color: "var(--gold-soft)", fontWeight: 700 }}>
-          🎁 Hai {freePacksAvailable} pacchetto{freePacksAvailable > 1 ? "i" : ""} gratis disponibil
-          {freePacksAvailable > 1 ? "i" : "e"}!
+          🎁 Hai {freeAvailable}{" "}
+          {pack.id === "pack-medio"
+            ? `baul${freeAvailable > 1 ? "i" : "e"}`
+            : `pacchett${freeAvailable > 1 ? "i" : "o"}`}{" "}
+          gratis disponibil{freeAvailable > 1 ? "i" : "e"}!
         </p>
       )}
       <button
@@ -46,6 +49,13 @@ function PackTile({
 
 export function Cittadella({ state }: Props) {
   const freePacksAvailable = state.me.statuses.filter((s) => s.type === "freePack").length;
+  const freeChestsAvailable = state.me.statuses.filter((s) => s.type === "freeChest").length;
+
+  const freeAvailableFor = (packId: string) => {
+    if (packId === "pack-base") return freePacksAvailable;
+    if (packId === "pack-medio") return freeChestsAvailable;
+    return 0;
+  };
 
   return (
     <div>
@@ -56,16 +66,17 @@ export function Cittadella({ state }: Props) {
       </p>
 
       <div className="pack-row">
-        {state.packs.map((p) => (
-          <PackTile
-            key={p.id}
-            pack={p}
-            canAfford={
-              (p.id === "pack-base" && freePacksAvailable > 0) || state.me.coins >= p.cost
-            }
-            freePacksAvailable={freePacksAvailable}
-          />
-        ))}
+        {state.packs.map((p) => {
+          const freeAvailable = freeAvailableFor(p.id);
+          return (
+            <PackTile
+              key={p.id}
+              pack={p}
+              canAfford={freeAvailable > 0 || state.me.coins >= p.cost}
+              freeAvailable={freeAvailable}
+            />
+          );
+        })}
       </div>
 
       <button

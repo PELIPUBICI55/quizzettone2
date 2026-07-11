@@ -55,10 +55,21 @@ export const CARD_CATALOG: CardDef[] = (() => {
       description:
         "L'ultimo dei dinosauri rimasti sulla terra. A causa delle braccia da T-Rex incredibilmente corte, non riesce a prendere il portafogli. Si vocifera viva a Gaeta, ma sono solo voci, forse..",
       effect: {
-        type: "passiveFreePack",
-        label: "Passivo: dopo ogni gioco a cui partecipi, ricevi lo status Pacchetto Gratis",
+        type: "passiveFreeChest",
+        label: "Passivo: dopo ogni gioco a cui partecipi, ricevi lo status Baule Gratis",
         isQuickEffect: false,
         isPassive: true,
+      },
+    },
+    "card-2": {
+      name: "Venni - Il falso palestrato",
+      image: "/cards/venni-il-falso-palestrato.webp",
+      description:
+        "Soprannominato \"L'Emanuela Orlandi delle palestre\", nessuno l'ha mai visto effettivamente allenarsi, o dentro una palestra. Se gli offri dei bits, canterà per te.",
+      effect: {
+        type: "stealAllFromTwo",
+        label: "Ruba tutte le monete a 2 giocatori a tua scelta",
+        isQuickEffect: false,
       },
     },
   };

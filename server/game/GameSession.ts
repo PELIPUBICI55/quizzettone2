@@ -21,8 +21,9 @@ import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../sha
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
 interface PendingChoice {
-  kind: "stealCoins" | "swapPosition" | "discardCard";
+  kind: "stealCoins" | "swapPosition" | "discardCard" | "stealAllFromTwo";
   amount?: number;
+  targets?: string[]; // bersagli già scelti, per le scelte a più passaggi
 }
 
 interface PendingShieldContext {
@@ -263,13 +264,13 @@ export class GameSession {
       const def = CARD_CATALOG.find((c) => c.id === owned.cardId);
       if (!def?.effect.isPassive) continue;
 
-      if (def.effect.type === "passiveFreePack") {
+      if (def.effect.type === "passiveFreeChest") {
         this.addStatus(
           player,
-          "freePack",
-          "Pacchetto gratis",
+          "freeChest",
+          "Baule gratis",
           "🎁",
-          "Il prossimo pacchetto base comprato alla Cittadella non costa nulla."
+          "Il prossimo Baule del Mercante comprato alla Cittadella non costa nulla."
         );
       }
       // altri effetti passivi futuri si aggiungono qui
@@ -768,18 +769,22 @@ export class GameSession {
     const choice = player.pendingChoice;
     if (!choice) return;
 
-    if (choice.kind === "stealCoins" || choice.kind === "swapPosition") {
+    if (choice.kind === "stealCoins" || choice.kind === "swapPosition" || choice.kind === "stealAllFromTwo") {
+      const alreadyChosen = choice.targets ?? [];
       const options = [...this.players.values()]
-        .filter((p) => p.id !== player.id && p.connected)
+        .filter((p) => p.id !== player.id && p.connected && !alreadyChosen.includes(p.id))
         .map((p) => ({ id: p.id, label: p.name }));
-      io.to(player.socketId).emit("board:chooseTarget", {
-        kind: "player",
-        prompt:
-          choice.kind === "stealCoins"
-            ? `Scegli a chi rubare ${choice.amount} monete`
-            : "Scegli con chi scambiare posizione",
-        options,
-      });
+
+      let prompt = "Scegli con chi scambiare posizione";
+      if (choice.kind === "stealCoins") prompt = `Scegli a chi rubare ${choice.amount} monete`;
+      else if (choice.kind === "stealAllFromTwo") {
+        prompt =
+          alreadyChosen.length === 0
+            ? "Scegli il 1° giocatore a cui rubare tutte le monete"
+            : "Scegli il 2° giocatore a cui rubare tutte le monete";
+      }
+
+      io.to(player.socketId).emit("board:chooseTarget", { kind: "player", prompt, options });
     } else if (choice.kind === "discardCard") {
       const options = player.collection.map((c) => {
         const def = CARD_CATALOG.find((cd) => cd.id === c.cardId);
@@ -799,6 +804,31 @@ export class GameSession {
     if (this.currentTurnPlayerId() !== playerId) return;
 
     const choice = player.pendingChoice;
+
+    if (choice.kind === "stealAllFromTwo") {
+      const targets = [...(choice.targets ?? []), optionId];
+      const othersCount = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      ).length;
+
+      if (targets.length < 2 && targets.length < othersCount) {
+        // serve ancora un secondo bersaglio
+        player.pendingChoice = { kind: "stealAllFromTwo", targets };
+        this.emitChoiceOptions(player, io);
+        this.broadcastState(io);
+        return;
+      }
+
+      player.pendingChoice = null;
+      for (const targetId of targets) {
+        const target = this.players.get(targetId);
+        if (target) this.stealAllWithShieldCheck(player, target, io);
+      }
+      this.advanceTurnAndHandleSkips(io);
+      this.broadcastState(io);
+      return;
+    }
+
     player.pendingChoice = null;
 
     if (choice.kind === "stealCoins") {
@@ -814,6 +844,23 @@ export class GameSession {
 
     this.advanceTurnAndHandleSkips(io);
     this.broadcastState(io);
+  }
+
+  // Come stealWithShieldCheck, ma ruba TUTTE le monete del bersaglio.
+  private stealAllWithShieldCheck(source: InternalPlayer, target: InternalPlayer, io: IOServer) {
+    const amount = target.coins;
+    this.maybeShield(
+      target,
+      `${source.name} sta cercando di rubarti TUTTE le tue monete (${amount})! Vuoi bloccarlo con uno scudo?`,
+      io,
+      (blocked) => {
+        if (!blocked) {
+          target.coins = 0;
+          source.coins += amount;
+        }
+        this.broadcastState(io);
+      }
+    );
   }
 
   // Se il bersaglio ha uno scudo attivo, gli chiede se vuole usarlo prima di
@@ -1107,6 +1154,25 @@ export class GameSession {
       return;
     }
 
+    // effetti "immediati" che non si armano per il prossimo quiz, ma agiscono
+    // subito scegliendo uno o più bersagli
+    if (cardDef.effect.type === "stealAllFromTwo") {
+      instance.used = true;
+      player.cardsUsedThisTurn.add(cardId);
+
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      );
+      if (others.length === 0) {
+        this.broadcastState(io);
+        return;
+      }
+      player.pendingChoice = { kind: "stealAllFromTwo", targets: [] };
+      this.emitChoiceOptions(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
     // la carta resta nella collezione ma non è più riutilizzabile
     instance.used = true;
     player.activeEffects.push(cardDef.effect.type);
@@ -1133,8 +1199,10 @@ export class GameSession {
     }
 
     const freePackIdx = player.statuses.findIndex((s) => s.type === "freePack");
+    const freeChestIdx = player.statuses.findIndex((s) => s.type === "freeChest");
     const usesFreePack = freePackIdx !== -1 && pack.id === "pack-base";
-    const cost = usesFreePack ? 0 : pack.cost;
+    const usesFreeChest = freeChestIdx !== -1 && pack.id === "pack-medio";
+    const cost = usesFreePack || usesFreeChest ? 0 : pack.cost;
 
     if (player.coins < cost) {
       io.to(player.socketId).emit("error:message", {
@@ -1145,6 +1213,7 @@ export class GameSession {
 
     player.coins -= cost;
     if (usesFreePack) player.statuses.splice(freePackIdx, 1);
+    if (usesFreeChest) player.statuses.splice(freeChestIdx, 1);
     const cards = pickRandomCards(pack.cardCount);
     player.collection.push(
       ...cards.map((c) => ({
