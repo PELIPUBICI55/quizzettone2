@@ -30,7 +30,7 @@ export function Board({ state }: Props) {
   const rollDice = () => socket.emit("board:roll");
   const confirmMove = (direction?: string) => socket.emit("board:confirmMove", { direction });
 
-  // carte NON rapide utilizzabili solo ora, prima di tirare il dado
+  // carte NON rapide e NON passive utilizzabili solo ora, prima di tirare il dado
   const cardsById = new Map(state.cardCatalog.map((c) => [c.id, c]));
   const preRollCardIds =
     myTurn && state.me.pendingRoll === null
@@ -39,7 +39,10 @@ export function Board({ state }: Props) {
             state.me.collection
               .filter((c) => !c.used)
               .map((c) => c.cardId)
-              .filter((id) => !cardsById.get(id)?.effect.isQuickEffect)
+              .filter((id) => {
+                const effect = cardsById.get(id)?.effect;
+                return effect && !effect.isQuickEffect && !effect.isPassive;
+              })
           ),
         ]
       : [];

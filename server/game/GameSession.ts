@@ -251,6 +251,27 @@ export class GameSession {
     player.statuses.push({ id: nextStatusId(), type, label, emoji, description });
   }
 
+  // Controlla la collezione del giocatore per figurine con effetto passivo
+  // (sempre attive finché possedute, non vanno "usate") e le applica. Ogni
+  // copia posseduta conta separatamente.
+  private applyPassiveCardEffects(player: InternalPlayer) {
+    for (const owned of player.collection) {
+      const def = CARD_CATALOG.find((c) => c.id === owned.cardId);
+      if (!def?.effect.isPassive) continue;
+
+      if (def.effect.type === "passiveFreePack") {
+        this.addStatus(
+          player,
+          "freePack",
+          "Pacchetto gratis",
+          "🎁",
+          "Il prossimo pacchetto base comprato alla Cittadella non costa nulla."
+        );
+      }
+      // altri effetti passivi futuri si aggiungono qui
+    }
+  }
+
   getSnapshot(forPlayerId: string): GameStateSnapshot | null {
     const me = this.players.get(forPlayerId);
     if (!me) return null;
@@ -1010,6 +1031,9 @@ export class GameSession {
       player.statuses.splice(halveIdx, 1);
     }
 
+    // figurine con effetto passivo: si applicano da sole alla fine di ogni gioco
+    this.applyPassiveCardEffects(player);
+
     player.coins += coinsAwarded;
     player.pendingWorldId = null;
 
@@ -1052,6 +1076,13 @@ export class GameSession {
     }
     const cardDef = CARD_CATALOG.find((c) => c.id === cardId);
     if (!cardDef) return;
+
+    if (cardDef.effect.isPassive) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Questa figurina ha un effetto passivo: si applica da sola, non va attivata.",
+      });
+      return;
+    }
 
     if (!cardDef.effect.isQuickEffect) {
       const isMyTurn = this.currentTurnPlayerId() === playerId;

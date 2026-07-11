@@ -77,10 +77,20 @@ export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Pr
         </span>
       )}
 
+      {!locked && card.effect.isPassive && (
+        <span className="passive-badge" title="Effetto passivo: sempre attivo finché la possiedi">
+          ∞
+        </span>
+      )}
+
       <div className="name">{card.name}</div>
 
       <div className="illustration">
-        <span className="emoji">{card.emoji}</span>
+        {card.image ? (
+          <img src={card.image} alt={card.name} className="illustration-img" />
+        ) : (
+          <span className="emoji">{card.emoji}</span>
+        )}
       </div>
 
       <div className="rarity-title">

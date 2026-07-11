@@ -26,14 +26,16 @@ export type CardEffectType =
   | "extraTime" // aggiunge secondi al timer della domanda corrente
   | "removeWrongOption" // elimina una risposta sbagliata
   | "doubleCoins" // raddoppia le monete guadagnate dal prossimo minigioco vinto
-  | "secondChance" // se sbagli, ti dà comunque met\u00e0 monete invece di zero
-  | "skipQuestion"; // salta la domanda corrente e ne pesca subito un'altra
+  | "secondChance" // se sbagli, ti da comunque meta monete invece di zero
+  | "skipQuestion" // salta la domanda corrente e ne pesca subito un'altra
+  | "passiveFreePack"; // passivo: dopo ogni gioco a cui partecipi, ricevi lo status "pacchetto gratis"
 
 export interface CardEffectDef {
   type: CardEffectType;
   value?: number;
   label: string; // descrizione leggibile, es. "+10 secondi al timer"
   isQuickEffect: boolean; // se true: usabile in qualsiasi momento, anche nel turno altrui
+  isPassive?: boolean; // se true: sempre attivo finche possiedi la carta, non va "usata"
 }
 
 export type CardRarity = "comune" | "rara" | "epica" | "leggendaria";
@@ -44,6 +46,7 @@ export interface CardDef {
   worldId: WorldId; // mondo/tema di appartenenza (influenza grafica e drop rate)
   rarity: CardRarity;
   emoji: string;
+  image?: string; // percorso di un'illustrazione vera, se presente (altrimenti si usa emoji)
   description: string; // testo narrativo mostrato sulla carta, sopra l'effetto
   effect: CardEffectDef;
 }

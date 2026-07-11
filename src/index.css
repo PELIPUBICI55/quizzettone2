@@ -694,6 +694,13 @@ input {
   font-size: 2.4rem;
 }
 
+.tcg-card .illustration .illustration-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
 .tcg-card .rarity-title {
   text-align: center;
   font-size: 0.6rem;
@@ -739,6 +746,25 @@ input {
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.tcg-card .passive-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #8fe0ff, #2a7ca3);
+  border: 2px solid #1a0f10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0a2a36;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   z-index: 2;
 }

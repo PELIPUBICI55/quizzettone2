@@ -40,7 +40,30 @@ export const CARD_CATALOG: CardDef[] = (() => {
       globalIndex++;
     }
   }
-  return list;
+
+  // Personalizzazioni carta per carta: sovrascrivono nome/descrizione/immagine/
+  // effetto dei placeholder generati sopra, una carta alla volta man mano che
+  // vengono definite. Le 3 leggendarie sono "card-1", "card-2", "card-3" (in
+  // quest'ordine).
+  const OVERRIDES: Record<
+    string,
+    Partial<Pick<CardDef, "name" | "description" | "image" | "effect">>
+  > = {
+    "card-1": {
+      name: "Frost3737 da Gaeta",
+      image: "/cards/frost3737-da-gaeta.png",
+      description:
+        "L'ultimo dei dinosauri rimasti sulla terra. A causa delle braccia da T-Rex incredibilmente corte, non riesce a prendere il portafogli. Si vocifera viva a Gaeta, ma sono solo voci, forse..",
+      effect: {
+        type: "passiveFreePack",
+        label: "Passivo: dopo ogni gioco a cui partecipi, ricevi lo status Pacchetto Gratis",
+        isQuickEffect: false,
+        isPassive: true,
+      },
+    },
+  };
+
+  return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));
 })();
 
 // Probabilità di estrazione per OGNI singola carta pescata da un pacchetto:
