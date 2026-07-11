@@ -529,26 +529,39 @@ export class GameSession {
     if (landedNodeId) {
       this.resolveArrival(player, landedNodeId, io);
     } else {
-      // ancora a metà ponte: controlla se è capitato su una casella imprevisto
-      const edge = edgeById(player.boardPosition.edgeId!);
-      const progress = player.boardPosition.progress!;
-      const tileIndex = edge ? absoluteTileIndex(edge, player.boardPosition.nodeId, progress) : -1;
-      const isSurprise = !!edge?.surprises.includes(tileIndex);
-      if (isSurprise) {
-        const card = drawRandomSurprise();
-        player.pendingSurprise = card;
-        io.emit("board:surpriseDrawn", {
-          playerId: player.id,
-          text: card.text,
-          effectLabel: card.effectLabel,
-        });
-        // il turno finisce solo quando chiuderà la schermata (closeSurprise)
-      } else {
-        this.advanceTurnAndHandleSkips(io);
-      }
+      this.checkSurpriseTileOrAdvance(player, io);
     }
 
     this.broadcastState(io);
+  }
+
+  // Controlla se la posizione attuale del giocatore (a metà ponte) è una
+  // casella imprevisto: se sì pesca una carta e mostra la schermata,
+  // altrimenti fa avanzare il turno normalmente. Usato sia dopo un tiro di
+  // dado normale sia dopo uno spostamento causato da un altro imprevisto,
+  // così gli imprevisti possono incatenarsi.
+  private checkSurpriseTileOrAdvance(player: InternalPlayer, io: IOServer) {
+    const pos = player.boardPosition;
+    if (pos.onNode || !pos.edgeId || pos.progress === undefined) {
+      this.advanceTurnAndHandleSkips(io);
+      return;
+    }
+    const edge = edgeById(pos.edgeId);
+    const tileIndex = edge ? absoluteTileIndex(edge, pos.nodeId, pos.progress) : -1;
+    const isSurprise = !!edge?.surprises.includes(tileIndex);
+
+    if (isSurprise) {
+      const card = drawRandomSurprise();
+      player.pendingSurprise = card;
+      io.emit("board:surpriseDrawn", {
+        playerId: player.id,
+        text: card.text,
+        effectLabel: card.effectLabel,
+      });
+      // il turno finisce solo quando chiuderà la schermata (closeSurprise)
+    } else {
+      this.advanceTurnAndHandleSkips(io);
+    }
   }
 
   // Gestisce l'arrivo su un nodo (Cittadella o mondo), sia per il movimento
@@ -630,12 +643,12 @@ export class GameSession {
     switch (card.effectCode) {
       case "moveForward": {
         const arrived = this.moveAlongCurrentEdge(player, card.amount ?? 1, io);
-        if (!arrived) this.advanceTurnAndHandleSkips(io);
+        if (!arrived) this.checkSurpriseTileOrAdvance(player, io);
         break;
       }
       case "moveBackward": {
         const arrived = this.moveAlongCurrentEdge(player, -(card.amount ?? 1), io);
-        if (!arrived) this.advanceTurnAndHandleSkips(io);
+        if (!arrived) this.checkSurpriseTileOrAdvance(player, io);
         break;
       }
       case "skipNextTurn":
