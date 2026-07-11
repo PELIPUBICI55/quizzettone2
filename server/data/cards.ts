@@ -51,7 +51,7 @@ export const CARD_CATALOG: CardDef[] = (() => {
   > = {
     "card-1": {
       name: "Frost3737 da Gaeta",
-      image: "/cards/frost3737-da-gaeta.png",
+      image: "/cards/frost3737-da-gaeta.webp",
       description:
         "L'ultimo dei dinosauri rimasti sulla terra. A causa delle braccia da T-Rex incredibilmente corte, non riesce a prendere il portafogli. Si vocifera viva a Gaeta, ma sono solo voci, forse..",
       effect: {
