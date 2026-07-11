@@ -72,3 +72,17 @@ export function neighborsOf(
 export function edgeById(edgeId: string): BoardEdge | undefined {
   return BOARD_EDGES.find((e) => e.id === edgeId);
 }
+
+// Le caselle "imprevisto" di un ponte sono indici fissi contati a partire da
+// edge.a. La "progress" di un giocatore invece è sempre contata a partire dal
+// nodo da cui è partito (che può essere sia edge.a sia edge.b, a seconda del
+// verso di percorrenza). Questa funzione converte la progress "relativa"
+// nell'indice assoluto (da edge.a), così il controllo delle caselle
+// imprevisto funziona correttamente in entrambi i versi.
+export function absoluteTileIndex(
+  edge: BoardEdge,
+  fromNodeId: string,
+  progress: number
+): number {
+  return fromNodeId === edge.a ? progress : edge.length + 1 - progress;
+}

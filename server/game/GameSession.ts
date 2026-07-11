@@ -16,7 +16,7 @@ import { CARD_CATALOG, pickRandomCards } from "../data/cards.js";
 import { PACKS } from "../data/packs.js";
 import { pickRandomQuestion, QuizQuestionInternal } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
-import { BOARD_EDGES, edgeById, neighborsOf } from "../../shared/board.js";
+import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -495,7 +495,8 @@ export class GameSession {
       // ancora a metà ponte: controlla se è capitato su una casella imprevisto
       const edge = edgeById(player.boardPosition.edgeId!);
       const progress = player.boardPosition.progress!;
-      const isSurprise = !!edge?.surprises.includes(progress);
+      const tileIndex = edge ? absoluteTileIndex(edge, player.boardPosition.nodeId, progress) : -1;
+      const isSurprise = !!edge?.surprises.includes(tileIndex);
       if (isSurprise) {
         const card = drawRandomSurprise();
         player.pendingSurprise = card;
