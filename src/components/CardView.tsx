@@ -5,6 +5,7 @@ interface Props {
   ownedCount?: number;
   locked?: boolean;
   spent?: boolean; // possiedi la carta ma l'effetto è già stato attivato
+  capped?: boolean; // hai già 5 copie: questa non è stata aggiunta alla collezione
   onUse?: () => void;
   onClick?: () => void;
 }
@@ -45,7 +46,7 @@ const PRISM_SPOTS = [
   { top: "94%", left: "8%", size: 8, rot: -12, delay: 2.2 },
 ];
 
-export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Props) {
+export function CardView({ card, ownedCount, locked, spent, capped, onUse, onClick }: Props) {
   const showPrisms = !locked && card.rarity === "leggendaria";
 
   return (
@@ -54,6 +55,12 @@ export function CardView({ card, ownedCount, locked, spent, onUse, onClick }: Pr
       title={card.effect.label}
       onClick={onClick}
     >
+      {capped && (
+        <div className="capped-overlay">
+          <span>Copie max raggiunte</span>
+        </div>
+      )}
+
       {showPrisms &&
         PRISM_SPOTS.map((s, i) => (
           <span

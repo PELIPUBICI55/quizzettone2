@@ -1,6 +1,9 @@
 import type { CardDef, CardEffectDef, CardRarity } from "../../shared/types.js";
 import { WORLDS } from "./worlds.js";
 
+// Numero massimo di copie possedibili per ogni singola figurina.
+export const MAX_CARD_COPIES = 5;
+
 const EFFECTS: CardEffectDef[] = [
   { type: "extraTime", value: 10, label: "+10 secondi al timer", isQuickEffect: false },
   { type: "removeWrongOption", label: "Elimina una risposta sbagliata", isQuickEffect: false },

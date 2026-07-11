@@ -782,6 +782,32 @@ input {
   z-index: 2;
 }
 
+.tcg-card .capped-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: 11px;
+  background: rgba(10, 5, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+}
+
+.tcg-card .capped-overlay span {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+  color: var(--gold-soft);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  transform: rotate(-8deg);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0, 0, 0, 0.4);
+}
+
 .tcg-card .use-btn {
   margin-top: 0.3rem;
 }

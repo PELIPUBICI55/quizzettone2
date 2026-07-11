@@ -283,8 +283,8 @@ export default function App() {
             Hai aperto un pacchetto!
           </h2>
           <div className="card-grid" style={{ maxWidth: 560 }}>
-            {packOpened.cards.map((c, i) => (
-              <CardView key={i} card={c} />
+            {packOpened.cards.map((entry, i) => (
+              <CardView key={i} card={entry.card} capped={entry.capped} />
             ))}
           </div>
           <button className="btn" onClick={() => setPackOpened(null)}>

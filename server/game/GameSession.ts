@@ -1,6 +1,7 @@
 import type { Server } from "socket.io";
 import type {
   BoardPosition,
+  CardDef,
   CardEffectType,
   ClientToServerEvents,
   GameStateSnapshot,
@@ -12,7 +13,7 @@ import type {
   SurpriseCardDef,
 } from "../../shared/types.js";
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
-import { CARD_CATALOG, pickRandomCards } from "../data/cards.js";
+import { CARD_CATALOG, MAX_CARD_COPIES, pickRandomCards } from "../data/cards.js";
 import { PACKS } from "../data/packs.js";
 import { pickRandomQuestion, QuizQuestionInternal } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
@@ -1166,6 +1167,20 @@ export class GameSession {
     );
   }
 
+  // Se questa è l'unica copia posseduta della carta, la disattiva soltanto
+  // (resta in collezione, non più usabile). Se ne possiedi altre, la scarta
+  // del tutto: così non ti puoi mai ritrovare con tutte e 5 le copie
+  // "spente" e bloccate, senza più poterne pescare di nuove dai pacchetti.
+  private consumeCardInstance(player: InternalPlayer, instance: OwnedCard) {
+    const totalCopies = player.collection.filter((c) => c.cardId === instance.cardId).length;
+    if (totalCopies <= 1) {
+      instance.used = true;
+    } else {
+      const idx = player.collection.indexOf(instance);
+      if (idx !== -1) player.collection.splice(idx, 1);
+    }
+  }
+
   useCard(playerId: string, cardId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
@@ -1209,7 +1224,7 @@ export class GameSession {
     // effetti "immediati" che non si armano per il prossimo quiz, ma agiscono
     // subito scegliendo uno o più bersagli
     if (cardDef.effect.type === "stealAllFromTwo") {
-      instance.used = true;
+      this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
 
       const others = [...this.players.values()].filter(
@@ -1226,7 +1241,7 @@ export class GameSession {
     }
 
     if (cardDef.effect.type === "swapZeroTripleWin") {
-      instance.used = true;
+      this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
 
       const others = [...this.players.values()].filter(
@@ -1242,8 +1257,8 @@ export class GameSession {
       return;
     }
 
-    // la carta resta nella collezione ma non è più riutilizzabile
-    instance.used = true;
+    // se hai più copie la scarta, altrimenti la disattiva soltanto
+    this.consumeCardInstance(player, instance);
     player.activeEffects.push(cardDef.effect.type);
     player.cardsUsedThisTurn.add(cardId);
 
@@ -1283,18 +1298,27 @@ export class GameSession {
     player.coins -= cost;
     if (usesFreePack) player.statuses.splice(freePackIdx, 1);
     if (usesFreeChest) player.statuses.splice(freeChestIdx, 1);
-    const cards = pickRandomCards(pack.cardCount);
-    player.collection.push(
-      ...cards.map((c) => ({
+
+    const drawnCards = pickRandomCards(pack.cardCount);
+    const resultCards: { card: CardDef; capped: boolean }[] = [];
+    for (const card of drawnCards) {
+      const owned = player.collection.filter((c) => c.cardId === card.id).length;
+      const limit = card.effect.isPassive ? 1 : MAX_CARD_COPIES;
+      if (owned >= limit) {
+        resultCards.push({ card, capped: true });
+        continue;
+      }
+      player.collection.push({
         instanceId: nextCardInstanceId(),
-        cardId: c.id,
+        cardId: card.id,
         used: false,
-      }))
-    );
+      });
+      resultCards.push({ card, capped: false });
+    }
 
     io.to(player.socketId).emit("shop:packOpened", {
       packId: pack.id,
-      cards,
+      cards: resultCards,
     });
     this.broadcastState(io);
   }

@@ -165,7 +165,7 @@ export interface QuizResultPayload {
 
 export interface PackOpenedPayload {
   packId: string;
-  cards: CardDef[];
+  cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
 }
 
 export type SurpriseEffectCode =
