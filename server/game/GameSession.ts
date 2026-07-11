@@ -51,6 +51,7 @@ interface InternalPlayer {
   awaitingQuizStart: boolean; // sulla schermata di risultato ruota, in attesa che clicchi "Ok iniziamo"
   pendingSurprise: SurpriseCardDef | null; // imprevisto pescato ma non ancora applicato
   pendingChoice: PendingChoice | null; // in attesa che scelga un bersaglio (giocatore/carta)
+  cardsUsedThisTurn: Set<string>; // cardId già attivati in questo turno (una copia per nome a turno)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
 }
 
@@ -123,6 +124,7 @@ export class GameSession {
       pendingSurprise: null,
       pendingChoice: null,
       pendingShieldContext: null,
+      cardsUsedThisTurn: new Set(),
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -239,6 +241,8 @@ export class GameSession {
       this.advanceTurn();
       guard++;
     }
+    const newCurrent = this.players.get(this.currentTurnPlayerId() ?? "");
+    if (newCurrent) newCurrent.cardsUsedThisTurn = new Set();
   }
 
   private addStatus(
@@ -313,6 +317,7 @@ export class GameSession {
         collection: me.collection,
         pendingRoll: me.pendingRoll,
         pendingShop: me.pendingShop,
+        cardsUsedThisTurn: [...me.cardsUsedThisTurn],
       },
     };
   }
@@ -1095,9 +1100,17 @@ export class GameSession {
       }
     }
 
+    if (player.cardsUsedThisTurn.has(cardId)) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Hai già attivato questa figurina in questo turno.",
+      });
+      return;
+    }
+
     // la carta resta nella collezione ma non è più riutilizzabile
     instance.used = true;
     player.activeEffects.push(cardDef.effect.type);
+    player.cardsUsedThisTurn.add(cardId);
 
     this.broadcastState(io);
   }

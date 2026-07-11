@@ -4,14 +4,14 @@ export const PACKS: PackDef[] = [
   {
     id: "pack-base",
     name: "Pacchetto del Viandante",
-    cost: 30,
+    cost: 50,
     cardCount: 1,
     description: "Una singola carta, ma ogni viaggio inizia da un passo.",
   },
   {
     id: "pack-medio",
     name: "Baule del Mercante",
-    cost: 70,
+    cost: 100,
     cardCount: 3,
     description: "Tre carte, buone probabilità di trovare qualcosa di raro.",
   },

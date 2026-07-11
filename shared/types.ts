@@ -100,6 +100,7 @@ export interface MyState extends PlayerSummary {
   collection: OwnedCard[]; // ogni copia posseduta, con il suo stato used/non used
   pendingRoll: number | null; // numero uscito, in attesa che tu confermi lo spostamento
   pendingShop: boolean; // sei atterrato sulla Cittadella e stai visitando il mercante
+  cardsUsedThisTurn: string[]; // id delle carte già attivate in questo turno (una per nome/id)
 }
 
 export interface GameStateSnapshot {
