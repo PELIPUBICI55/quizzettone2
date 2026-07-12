@@ -1743,16 +1743,20 @@ export class GameSession {
 
   // Avvia il round di TCT (mondo "abisso"): tutti i giocatori connessi con
   // almeno 100 monete vengono iscritti automaticamente, pagano la quota
-  // (che forma il montepremi) e si pescano le domande. Se nessuno è
-  // qualificato, il tuffo nell'abisso salta e il turno prosegue normale.
+  // (che forma il montepremi) e si pescano le domande. Se non ci sono almeno
+  // due giocatori qualificati (serve un vero "tutti contro tutti"), il tuffo
+  // nell'abisso salta e il turno prosegue normale.
   private beginTct(player: InternalPlayer, io: IOServer) {
     const participants = [...this.players.values()].filter(
       (p) => p.connected && p.coins >= TCT_ENTRY_FEE
     );
 
-    if (participants.length === 0) {
+    if (participants.length < 2) {
       io.emit("tct:skipped", {
-        reason: "Nessun giocatore ha almeno 100 monete: il tuffo nell'abisso salta.",
+        reason:
+          participants.length === 0
+            ? "Nessun giocatore ha almeno 100 monete: il tuffo nell'abisso salta."
+            : "Serve almeno un altro giocatore con 100 monete: il tuffo nell'abisso salta.",
       });
       player.pendingWorldId = null;
       this.maybeAdvanceTurn(player, io);
