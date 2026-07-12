@@ -1,32 +1,42 @@
 import type { Top5Def } from "../../shared/types.js";
 
-// Categorie placeholder: personalizzale pure in seguito, l'importante è che
-// ogni "answers" abbia esattamente 5 elementi, in ordine dal 1° al 5° posto.
 export const TOP5_BANK: Top5Def[] = [
   {
-    id: "top5-1",
-    title: "Top 5 film più visti di sempre al cinema",
-    answers: ["Avatar", "Avengers: Endgame", "Titanic", "Star Wars: Il Risveglio della Forza", "Avengers: Infinity War"],
+    id: "top5-animali-case-mondo",
+    title: "Animali più presenti nelle case (nel mondo)",
+    answers: ["Gatti", "Cani", "Pesci", "Roditori (criceti, conigli, ecc.)", "Uccelli"],
+    source: "Stime globali sul possesso di animali domestici (Spiegato.com e altre fonti comparate)",
   },
   {
-    id: "top5-2",
-    title: "Top 5 Paesi più popolosi del mondo",
-    answers: ["India", "Cina", "Stati Uniti", "Indonesia", "Pakistan"],
+    id: "top5-razze-cane-mondo",
+    title: "Razze di cane più diffuse nel mondo",
+    answers: ["Bulldog Francese", "Labrador Retriever", "Golden Retriever", "Pastore Tedesco", "Barboncino"],
+    source: "American Kennel Club (AKC), classifica 2023",
   },
   {
-    id: "top5-3",
-    title: "Top 5 montagne più alte del mondo",
-    answers: ["Everest", "K2", "Kangchenjunga", "Lhotse", "Makalu"],
+    id: "top5-nazioni-rateo-pet",
+    title: "Nazioni con rateo animali domestici per famiglia più alto",
+    answers: ["Ungheria", "Italia", "Francia", "Germania", "Spagna"],
+    source: "Indagine GfK/Censis su 22 Paesi, riportata da MyPersonalTrainer",
   },
   {
-    id: "top5-4",
-    title: "Top 5 squadre con più titoli di Champions League",
-    answers: ["Real Madrid", "Milan", "Bayern Monaco", "Liverpool", "Barcellona"],
+    id: "top5-animali-cucinati",
+    title: "Animali più cucinati al mondo",
+    answers: ["Pollo", "Maiale", "Manzo", "Pecora", "Capra"],
+    source: "OCSE-FAO (Organizzazione per la Cooperazione e lo Sviluppo Economico / FAO)",
   },
   {
-    id: "top5-5",
-    title: "Top 5 fiumi più lunghi del mondo",
-    answers: ["Nilo", "Rio delle Amazzoni", "Fiume Azzurro (Yangtze)", "Mississippi", "Fiume Giallo (Huang He)"],
+    id: "top5-animali-italia",
+    title: "Animali più presenti in Italia",
+    answers: ["Pesci", "Gatti", "Cani", "Uccelli", "Rettili e anfibi"],
+    source: "Rapporto Assalco-Zoomark 2026",
+  },
+  {
+    id: "top5-animali-zoo",
+    title: "Animali più presenti negli zoo",
+    answers: ["Leoni", "Elefanti", "Giraffe", "Tigri", "Scimmie/Primati"],
+    source:
+      "Non esiste una classifica statistica ufficiale unica: elenco basato sul consenso comune tra le principali guide di zoo nel mondo",
   },
 ];
 

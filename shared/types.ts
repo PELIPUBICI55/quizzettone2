@@ -188,6 +188,7 @@ export interface Top5Def {
   id: string;
   title: string;
   answers: string[]; // esattamente 5: answers[0] = 1° posto ... answers[4] = 5° posto
+  source?: string; // da dove viene la classifica, mostrata in fondo alla schermata di gioco
 }
 
 export interface Top5Slot {
@@ -200,6 +201,7 @@ export interface Top5State {
   title: string;
   slots: Top5Slot[];
   heartsBroken: number; // 0-3
+  source?: string; // fonte della classifica, mostrata a tutti in fondo
   fullAnswers?: string[]; // presente SOLO nella versione mandata all'host
 }
 
@@ -286,6 +288,7 @@ export interface ClientToServerEvents {
   "top5:reveal": (payload: { rank: number }) => void;
   "top5:breakHeart": () => void;
   "top5:resolve": (payload: { won: boolean }) => void;
+  "top5:beginGame": () => void;
 }
 
 // Eventi server -> client
@@ -302,6 +305,7 @@ export interface ServerToClientEvents {
   "quiz:question": (payload: QuizQuestionPayload) => void;
   "quiz:result": (payload: QuizResultPayload) => void;
   "top5:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "top5:categoryDrawn": (payload: { playerId: string; title: string }) => void;
   "top5:state": (payload: Top5State) => void;
   "top5:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;

@@ -73,6 +73,7 @@ interface InternalPlayer {
   cardsUsedThisTurn: Set<string>; // cardId già attivati in questo turno (una copia per nome a turno)
   bonusRolls: number; // tiri extra garantiti in questo turno (es. da una figurina)
   pendingTop5: { def: Top5Def; revealed: boolean[]; heartsBroken: number } | null;
+  awaitingTop5Start: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
   forcedNextCategory: string | null; // categoria scelta per il prossimo quiz (Nuvola)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
 }
@@ -150,6 +151,7 @@ export class GameSession {
       cardsUsedThisTurn: new Set(),
       bonusRolls: 0,
       pendingTop5: null,
+      awaitingTop5Start: false,
       forcedNextCategory: null,
     };
     this.players.set(player.id, player);
@@ -196,9 +198,15 @@ export class GameSession {
     }
 
     // Se una top5 è in corso (di chiunque), rimanda anche quella a chi
-    // rientra: vista completa se è l'host, altrimenti nascosta.
+    // rientra: schermata di conferma categoria, o vista di gioco (completa
+    // se è l'host, altrimenti nascosta).
     const top5Player = [...this.players.values()].find((p) => p.pendingTop5);
-    if (top5Player?.pendingTop5) {
+    if (top5Player?.awaitingTop5Start) {
+      io.to(player.socketId).emit("top5:categoryDrawn", {
+        playerId: top5Player.id,
+        title: top5Player.pendingTop5!.def.title,
+      });
+    } else if (top5Player?.pendingTop5) {
       const { def, revealed, heartsBroken } = top5Player.pendingTop5;
       const slots = def.answers.map((answer, i) => ({
         rank: i + 1,
@@ -209,6 +217,7 @@ export class GameSession {
         title: def.title,
         slots,
         heartsBroken,
+        source: def.source,
         fullAnswers: player.isHost ? def.answers : undefined,
       });
     }
@@ -1330,8 +1339,23 @@ export class GameSession {
 
     setTimeout(() => {
       if (!player.pendingTop5 || player.pendingTop5.def.id !== def.id) return;
-      this.broadcastTop5State(player, io);
+      player.awaitingTop5Start = true;
+      io.emit("top5:categoryDrawn", { playerId: player.id, title: def.title });
     }, durationMs);
+  }
+
+  // Conferma la categoria e apre davvero la griglia di gioco (con le
+  // risposte nascoste/rivelate e i controlli host).
+  beginTop5Game(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingTop5Start) return;
+    player.awaitingTop5Start = false;
+    this.broadcastTop5State(player, io);
   }
 
   // Manda lo stato della top5 a tutti (risposte nascoste finché non
@@ -1344,7 +1368,13 @@ export class GameSession {
       answer: revealed[i] ? answer : null,
     }));
 
-    io.emit("top5:state", { playerId: player.id, title: def.title, slots, heartsBroken });
+    io.emit("top5:state", {
+      playerId: player.id,
+      title: def.title,
+      slots,
+      heartsBroken,
+      source: def.source,
+    });
 
     const host = [...this.players.values()].find((p) => p.isHost);
     if (host) {
@@ -1353,6 +1383,7 @@ export class GameSession {
         title: def.title,
         slots,
         heartsBroken,
+        source: def.source,
         fullAnswers: def.answers,
       });
     }

@@ -77,6 +77,12 @@ export function Top5Game({ state, isHost, playerName }: Props) {
           In attesa che l'host giudichi le risposte...
         </p>
       )}
+
+      {state.source && (
+        <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", marginTop: "0.4rem" }}>
+          Fonte: {state.source}
+        </p>
+      )}
     </div>
   );
 }

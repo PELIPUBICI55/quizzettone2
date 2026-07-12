@@ -15,6 +15,7 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Wheel } from "./components/Wheel";
 import { WheelResultScreen } from "./components/WheelResultScreen";
 import { Top5Wheel } from "./components/Top5Wheel";
+import { Top5CategoryReveal } from "./components/Top5CategoryReveal";
 import { Top5Game } from "./components/Top5Game";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -45,6 +46,9 @@ export default function App() {
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
   const [top5SpinInfo, setTop5SpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [top5CategoryInfo, setTop5CategoryInfo] = useState<{ playerId: string; title: string } | null>(
     null
   );
   const [top5State, setTop5State] = useState<Top5State | null>(null);
@@ -94,15 +98,23 @@ export default function App() {
     const onTop5Spin = (p: { playerId: string; durationMs: number }) => {
       setWelcomeInfo(null);
       setTop5SpinInfo(p);
+      setTop5CategoryInfo(null);
+      setTop5State(null);
+    };
+    const onTop5Category = (p: { playerId: string; title: string }) => {
+      setTop5SpinInfo(null);
+      setTop5CategoryInfo(p);
       setTop5State(null);
     };
     const onTop5State = (p: Top5State) => {
       setTop5SpinInfo(null);
+      setTop5CategoryInfo(null);
       setTop5State(p);
     };
     const onTop5Ended = () => {
       setTop5State(null);
       setTop5SpinInfo(null);
+      setTop5CategoryInfo(null);
     };
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
@@ -128,6 +140,7 @@ export default function App() {
     socket.on("quiz:question", onQuestion);
     socket.on("quiz:result", onResult);
     socket.on("top5:spin", onTop5Spin);
+    socket.on("top5:categoryDrawn", onTop5Category);
     socket.on("top5:state", onTop5State);
     socket.on("top5:ended", onTop5Ended);
     socket.on("shop:packOpened", onPack);
@@ -147,6 +160,7 @@ export default function App() {
       socket.off("quiz:question", onQuestion);
       socket.off("quiz:result", onResult);
       socket.off("top5:spin", onTop5Spin);
+      socket.off("top5:categoryDrawn", onTop5Category);
       socket.off("top5:state", onTop5State);
       socket.off("top5:ended", onTop5Ended);
       socket.off("shop:packOpened", onPack);
@@ -169,6 +183,7 @@ export default function App() {
     setQuizPayload((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizResult((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setTop5SpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setTop5CategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setTop5State((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
@@ -241,6 +256,7 @@ export default function App() {
   const wheelPlayer = state.players.find((p) => p.id === wheelInfo?.playerId);
   const wheelResultPlayer = state.players.find((p) => p.id === wheelResultInfo?.playerId);
   const top5SpinPlayer = state.players.find((p) => p.id === top5SpinInfo?.playerId);
+  const top5CategoryPlayer = state.players.find((p) => p.id === top5CategoryInfo?.playerId);
   const top5StatePlayer = state.players.find((p) => p.id === top5State?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
@@ -275,6 +291,12 @@ export default function App() {
           <Top5Wheel
             isMine={top5SpinInfo.playerId === state.me.id}
             playerName={top5SpinPlayer?.name ?? "?"}
+          />
+        ) : top5CategoryInfo ? (
+          <Top5CategoryReveal
+            title={top5CategoryInfo.title}
+            isMine={top5CategoryInfo.playerId === state.me.id}
+            playerName={top5CategoryPlayer?.name ?? "?"}
           />
         ) : top5State ? (
           <Top5Game

@@ -94,6 +94,13 @@ io.on("connection", (socket) => {
     session?.resolveTop5(loc.playerId, won, io);
   });
 
+  socket.on("top5:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginTop5Game(loc.playerId, io);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;
