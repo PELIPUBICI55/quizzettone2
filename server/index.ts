@@ -73,6 +73,27 @@ io.on("connection", (socket) => {
     session?.setPlayerCoins(loc.playerId, playerId, amount, io);
   });
 
+  socket.on("top5:reveal", ({ rank }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.revealTop5Rank(loc.playerId, rank, io);
+  });
+
+  socket.on("top5:breakHeart", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.breakTop5Heart(loc.playerId, io);
+  });
+
+  socket.on("top5:resolve", ({ won }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveTop5(loc.playerId, won, io);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

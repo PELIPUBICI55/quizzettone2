@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
 }
 
-const EFFECT_LABELS: Record<CardEffectType, string> = {
+const EFFECT_LABELS: Partial<Record<CardEffectType, string>> = {
   extraTime: "Tempo extra",
   removeWrongOption: "Aiuto attivo",
   doubleCoins: "Monete raddoppiate",
@@ -54,7 +54,7 @@ export function QuizMinigame({ payload, result, onClose }: Props) {
         <div className="effects-row">
           {activeEffects.map((e, i) => (
             <span className="effect-chip" key={e + i}>
-              {EFFECT_LABELS[e]} pronto
+              {EFFECT_LABELS[e] ?? e} pronto
             </span>
           ))}
         </div>

@@ -6,6 +6,7 @@ import type {
   PackOpenedPayload,
   QuizQuestionPayload,
   QuizResultPayload,
+  Top5State,
   WheelSpinPayload,
 } from "../shared/types";
 import { socket } from "./socket";
@@ -13,6 +14,8 @@ import { JoinScreen } from "./components/JoinScreen";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Wheel } from "./components/Wheel";
 import { WheelResultScreen } from "./components/WheelResultScreen";
+import { Top5Wheel } from "./components/Top5Wheel";
+import { Top5Game } from "./components/Top5Game";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
 import { ShieldPromptScreen } from "./components/ShieldPromptScreen";
@@ -41,6 +44,10 @@ export default function App() {
   } | null>(null);
   const [quizPayload, setQuizPayload] = useState<QuizQuestionPayload | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
+  const [top5SpinInfo, setTop5SpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [top5State, setTop5State] = useState<Top5State | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
   const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; text: string; effectLabel: string } | null>(
     null
@@ -64,6 +71,8 @@ export default function App() {
       setWheelResultInfo(null);
       setQuizPayload(null);
       setQuizResult(null);
+      setTop5SpinInfo(null);
+      setTop5State(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
       setWelcomeInfo(null);
@@ -82,6 +91,19 @@ export default function App() {
       setQuizResult(null);
     };
     const onResult = (p: QuizResultPayload) => setQuizResult(p);
+    const onTop5Spin = (p: { playerId: string; durationMs: number }) => {
+      setWelcomeInfo(null);
+      setTop5SpinInfo(p);
+      setTop5State(null);
+    };
+    const onTop5State = (p: Top5State) => {
+      setTop5SpinInfo(null);
+      setTop5State(p);
+    };
+    const onTop5Ended = () => {
+      setTop5State(null);
+      setTop5SpinInfo(null);
+    };
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
       setSurpriseInfo(p);
@@ -105,6 +127,9 @@ export default function App() {
     socket.on("wheel:result", onWheelResult);
     socket.on("quiz:question", onQuestion);
     socket.on("quiz:result", onResult);
+    socket.on("top5:spin", onTop5Spin);
+    socket.on("top5:state", onTop5State);
+    socket.on("top5:ended", onTop5Ended);
     socket.on("shop:packOpened", onPack);
     socket.on("board:surpriseDrawn", onSurpriseDrawn);
     socket.on("board:chooseTarget", onChooseTarget);
@@ -121,6 +146,9 @@ export default function App() {
       socket.off("wheel:result", onWheelResult);
       socket.off("quiz:question", onQuestion);
       socket.off("quiz:result", onResult);
+      socket.off("top5:spin", onTop5Spin);
+      socket.off("top5:state", onTop5State);
+      socket.off("top5:ended", onTop5Ended);
       socket.off("shop:packOpened", onPack);
       socket.off("board:surpriseDrawn", onSurpriseDrawn);
       socket.off("board:chooseTarget", onChooseTarget);
@@ -140,6 +168,8 @@ export default function App() {
     setSurpriseInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizPayload((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setQuizResult((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setTop5SpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setTop5State((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -210,6 +240,8 @@ export default function App() {
   const welcomePlayer = state.players.find((p) => p.id === welcomeInfo?.playerId);
   const wheelPlayer = state.players.find((p) => p.id === wheelInfo?.playerId);
   const wheelResultPlayer = state.players.find((p) => p.id === wheelResultInfo?.playerId);
+  const top5SpinPlayer = state.players.find((p) => p.id === top5SpinInfo?.playerId);
+  const top5StatePlayer = state.players.find((p) => p.id === top5State?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -238,6 +270,17 @@ export default function App() {
             world={currentWorld}
             isMine={welcomeInfo.playerId === state.me.id}
             playerName={welcomePlayer?.name ?? "?"}
+          />
+        ) : top5SpinInfo ? (
+          <Top5Wheel
+            isMine={top5SpinInfo.playerId === state.me.id}
+            playerName={top5SpinPlayer?.name ?? "?"}
+          />
+        ) : top5State ? (
+          <Top5Game
+            state={top5State}
+            isHost={state.me.isHost}
+            playerName={top5StatePlayer?.name ?? "?"}
           />
         ) : wheelInfo ? (
           <Wheel

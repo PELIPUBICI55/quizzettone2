@@ -5,7 +5,7 @@ interface Props {
   state: GameStateSnapshot;
 }
 
-const EFFECT_LABELS: Record<CardEffectType, { emoji: string; label: string }> = {
+const EFFECT_LABELS: Partial<Record<CardEffectType, { emoji: string; label: string }>> = {
   extraTime: { emoji: "⏱️", label: "Tempo extra pronto" },
   removeWrongOption: { emoji: "🛡️", label: "Aiuto attivo pronto" },
   doubleCoins: { emoji: "💰", label: "Monete raddoppiate pronte" },
@@ -58,11 +58,14 @@ export function StatusMenu({ state }: Props) {
                       </p>
                     ) : (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                        {p.activeEffects.map((e, i) => (
-                          <span className="effect-chip" key={`ae-${i}`}>
-                            {EFFECT_LABELS[e].emoji} {EFFECT_LABELS[e].label}
-                          </span>
-                        ))}
+                        {p.activeEffects.map((e, i) => {
+                          const info = EFFECT_LABELS[e];
+                          return (
+                            <span className="effect-chip" key={`ae-${i}`}>
+                              {info ? `${info.emoji} ${info.label}` : `${e} pronto`}
+                            </span>
+                          );
+                        })}
                         {p.statuses.map((s) => (
                           <span className="effect-chip" key={s.id} title={s.description}>
                             {s.emoji} {s.label}

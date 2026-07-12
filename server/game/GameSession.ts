@@ -11,6 +11,7 @@ import type {
   ServerToClientEvents,
   StatusType,
   SurpriseCardDef,
+  Top5Def,
 } from "../../shared/types.js";
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
 import { CARD_CATALOG, MAX_CARD_COPIES, pickRandomCards } from "../data/cards.js";
@@ -22,6 +23,7 @@ import {
   QuizQuestionInternal,
 } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
+import { pickRandomTop5 } from "../data/top5.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -70,11 +72,13 @@ interface InternalPlayer {
   pendingChoice: PendingChoice | null; // in attesa che scelga un bersaglio (giocatore/carta)
   cardsUsedThisTurn: Set<string>; // cardId già attivati in questo turno (una copia per nome a turno)
   bonusRolls: number; // tiri extra garantiti in questo turno (es. da una figurina)
+  pendingTop5: { def: Top5Def; revealed: boolean[]; heartsBroken: number } | null;
   forcedNextCategory: string | null; // categoria scelta per il prossimo quiz (Nuvola)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
 }
 
 const BASE_REWARD = 20;
+const TOP5_REWARD = 100;
 const WRONG_REWARD = 0;
 
 let playerIdCounter = 0;
@@ -145,6 +149,7 @@ export class GameSession {
       pendingShieldContext: null,
       cardsUsedThisTurn: new Set(),
       bonusRolls: 0,
+      pendingTop5: null,
       forcedNextCategory: null,
     };
     this.players.set(player.id, player);
@@ -187,6 +192,24 @@ export class GameSession {
     } else if (player.pendingShieldContext) {
       io.to(player.socketId).emit("board:useShieldPrompt", {
         message: player.pendingShieldContext.message,
+      });
+    }
+
+    // Se una top5 è in corso (di chiunque), rimanda anche quella a chi
+    // rientra: vista completa se è l'host, altrimenti nascosta.
+    const top5Player = [...this.players.values()].find((p) => p.pendingTop5);
+    if (top5Player?.pendingTop5) {
+      const { def, revealed, heartsBroken } = top5Player.pendingTop5;
+      const slots = def.answers.map((answer, i) => ({
+        rank: i + 1,
+        answer: revealed[i] ? answer : null,
+      }));
+      io.to(player.socketId).emit("top5:state", {
+        playerId: top5Player.id,
+        title: def.title,
+        slots,
+        heartsBroken,
+        fullAnswers: player.isHost ? def.answers : undefined,
       });
     }
   }
@@ -1269,7 +1292,15 @@ export class GameSession {
     player.awaitingWheelStart = false;
 
     const worldId = player.pendingWorldId!;
-    // Per ora l'unico tipo di minigioco implementato è il quiz.
+
+    // Il mondo "vulcano" ha una meccanica dedicata (Top 5), arbitrata a voce
+    // dall'host: salta del tutto la ruota/quiz generici.
+    if (worldId === "vulcano") {
+      this.beginTop5(player, io);
+      return;
+    }
+
+    // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
 
@@ -1285,6 +1316,108 @@ export class GameSession {
       player.awaitingQuizStart = true;
       io.emit("wheel:result", { playerId: player.id, worldId, resultType });
     }, durationMs);
+  }
+
+  // Avvia il minigioco Top 5: pesca una categoria, mostra l'animazione della
+  // ruota verticale, poi rivela lo stato (nascosto per i giocatori, completo
+  // per l'host) a tutti.
+  private beginTop5(player: InternalPlayer, io: IOServer) {
+    const def = pickRandomTop5();
+    player.pendingTop5 = { def, revealed: [false, false, false, false, false], heartsBroken: 0 };
+    const durationMs = 2600;
+
+    io.emit("top5:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingTop5 || player.pendingTop5.def.id !== def.id) return;
+      this.broadcastTop5State(player, io);
+    }, durationMs);
+  }
+
+  // Manda lo stato della top5 a tutti (risposte nascoste finché non
+  // rivelate) e, in aggiunta, la versione completa solo all'host.
+  private broadcastTop5State(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingTop5) return;
+    const { def, revealed, heartsBroken } = player.pendingTop5;
+    const slots = def.answers.map((answer, i) => ({
+      rank: i + 1,
+      answer: revealed[i] ? answer : null,
+    }));
+
+    io.emit("top5:state", { playerId: player.id, title: def.title, slots, heartsBroken });
+
+    const host = [...this.players.values()].find((p) => p.isHost);
+    if (host) {
+      io.to(host.socketId).emit("top5:state", {
+        playerId: player.id,
+        title: def.title,
+        slots,
+        heartsBroken,
+        fullAnswers: def.answers,
+      });
+    }
+  }
+
+  // Solo l'host può rivelare una posizione della classifica (dopo che il
+  // giocatore di turno ha detto la risposta giusta a voce).
+  revealTop5Rank(hostId: string, rank: number, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingTop5);
+    if (!target?.pendingTop5) return;
+    const idx = rank - 1;
+    if (idx < 0 || idx >= target.pendingTop5.revealed.length) return;
+    target.pendingTop5.revealed[idx] = true;
+    this.broadcastTop5State(target, io);
+  }
+
+  // Solo l'host può "spezzare" un cuore (risposta sbagliata data a voce).
+  breakTop5Heart(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingTop5);
+    if (!target?.pendingTop5) return;
+    target.pendingTop5.heartsBroken = Math.min(3, target.pendingTop5.heartsBroken + 1);
+    this.broadcastTop5State(target, io);
+  }
+
+  // Solo l'host decreta l'esito: vittoria assegna le monete (con gli stessi
+  // status/passivi del quiz normale), sconfitta no.
+  resolveTop5(hostId: string, won: boolean, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingTop5);
+    if (!target?.pendingTop5) return;
+
+    target.pendingTop5 = null;
+
+    // figurine con effetto passivo: si applicano da sole alla fine di ogni gioco
+    this.applyPassiveCardEffects(target);
+
+    let coinsAwarded = won ? TOP5_REWARD : 0;
+
+    const doubleIdx = target.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      coinsAwarded *= 2;
+      target.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = target.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      coinsAwarded *= 3;
+      target.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = target.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      coinsAwarded = Math.floor(coinsAwarded / 2);
+      target.statuses.splice(halveIdx, 1);
+    }
+
+    target.coins += coinsAwarded;
+    target.pendingWorldId = null;
+
+    io.emit("top5:ended", { playerId: target.id, won, coinsAwarded });
+    this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
   }
 
   beginQuiz(playerId: string, io: IOServer) {
