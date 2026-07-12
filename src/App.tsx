@@ -48,9 +48,12 @@ export default function App() {
   const [top5SpinInfo, setTop5SpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
     null
   );
-  const [top5CategoryInfo, setTop5CategoryInfo] = useState<{ playerId: string; title: string } | null>(
-    null
-  );
+  const [top5CategoryInfo, setTop5CategoryInfo] = useState<{
+    playerId: string;
+    categoryId: string;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
   const [top5State, setTop5State] = useState<Top5State | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
   const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; text: string; effectLabel: string } | null>(
@@ -101,7 +104,12 @@ export default function App() {
       setTop5CategoryInfo(null);
       setTop5State(null);
     };
-    const onTop5Category = (p: { playerId: string; title: string }) => {
+    const onTop5Category = (p: {
+      playerId: string;
+      categoryId: string;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
       setTop5SpinInfo(null);
       setTop5CategoryInfo(p);
       setTop5State(null);
@@ -294,7 +302,8 @@ export default function App() {
           />
         ) : top5CategoryInfo ? (
           <Top5CategoryReveal
-            title={top5CategoryInfo.title}
+            categoryName={top5CategoryInfo.categoryName}
+            categoryEmoji={top5CategoryInfo.categoryEmoji}
             isMine={top5CategoryInfo.playerId === state.me.id}
             playerName={top5CategoryPlayer?.name ?? "?"}
           />

@@ -11,6 +11,7 @@ import type {
   ServerToClientEvents,
   StatusType,
   SurpriseCardDef,
+  Top5CategoryDef,
   Top5Def,
 } from "../../shared/types.js";
 import { WORLDS, CITTADELLA_ID } from "../data/worlds.js";
@@ -23,7 +24,7 @@ import {
   QuizQuestionInternal,
 } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
-import { pickRandomTop5 } from "../data/top5.js";
+import { pickRandomCategory, pickRandomTop5InCategory } from "../data/top5.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -72,7 +73,12 @@ interface InternalPlayer {
   pendingChoice: PendingChoice | null; // in attesa che scelga un bersaglio (giocatore/carta)
   cardsUsedThisTurn: Set<string>; // cardId già attivati in questo turno (una copia per nome a turno)
   bonusRolls: number; // tiri extra garantiti in questo turno (es. da una figurina)
-  pendingTop5: { def: Top5Def; revealed: boolean[]; heartsBroken: number } | null;
+  pendingTop5: {
+    def: Top5Def;
+    category: Top5CategoryDef;
+    revealed: boolean[];
+    heartsBroken: number;
+  } | null;
   awaitingTop5Start: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
   forcedNextCategory: string | null; // categoria scelta per il prossimo quiz (Nuvola)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
@@ -202,9 +208,12 @@ export class GameSession {
     // se è l'host, altrimenti nascosta).
     const top5Player = [...this.players.values()].find((p) => p.pendingTop5);
     if (top5Player?.awaitingTop5Start) {
+      const { category } = top5Player.pendingTop5!;
       io.to(player.socketId).emit("top5:categoryDrawn", {
         playerId: top5Player.id,
-        title: top5Player.pendingTop5!.def.title,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
       });
     } else if (top5Player?.pendingTop5) {
       const { def, revealed, heartsBroken } = top5Player.pendingTop5;
@@ -1331,8 +1340,14 @@ export class GameSession {
   // ruota verticale, poi rivela lo stato (nascosto per i giocatori, completo
   // per l'host) a tutti.
   private beginTop5(player: InternalPlayer, io: IOServer) {
-    const def = pickRandomTop5();
-    player.pendingTop5 = { def, revealed: [false, false, false, false, false], heartsBroken: 0 };
+    const category = pickRandomCategory();
+    const def = pickRandomTop5InCategory(category.id);
+    player.pendingTop5 = {
+      def,
+      category,
+      revealed: [false, false, false, false, false],
+      heartsBroken: 0,
+    };
     const durationMs = 2600;
 
     io.emit("top5:spin", { playerId: player.id, durationMs });
@@ -1340,7 +1355,12 @@ export class GameSession {
     setTimeout(() => {
       if (!player.pendingTop5 || player.pendingTop5.def.id !== def.id) return;
       player.awaitingTop5Start = true;
-      io.emit("top5:categoryDrawn", { playerId: player.id, title: def.title });
+      io.emit("top5:categoryDrawn", {
+        playerId: player.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
     }, durationMs);
   }
 

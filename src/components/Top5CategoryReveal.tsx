@@ -1,12 +1,13 @@
 import { socket } from "../socket";
 
 interface Props {
-  title: string;
+  categoryName: string;
+  categoryEmoji: string;
   isMine: boolean;
   playerName: string;
 }
 
-export function Top5CategoryReveal({ title, isMine, playerName }: Props) {
+export function Top5CategoryReveal({ categoryName, categoryEmoji, isMine, playerName }: Props) {
   return (
     <div className="wheel-wrap">
       <h1 className="display" style={{ fontSize: "1.6rem" }}>
@@ -15,7 +16,9 @@ export function Top5CategoryReveal({ title, isMine, playerName }: Props) {
 
       <div className="wheel-text-panel top5-category-panel">
         <p className="subtle">Top 5</p>
-        <p style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--gold-soft)" }}>{title}</p>
+        <p style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--gold-soft)" }}>
+          {categoryEmoji} {categoryName}
+        </p>
       </div>
 
       {isMine ? (

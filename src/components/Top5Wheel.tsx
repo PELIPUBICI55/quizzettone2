@@ -1,9 +1,13 @@
+import { TOP5_CATEGORIES } from "../../shared/top5Categories";
+
 interface Props {
   isMine: boolean;
   playerName: string;
 }
 
-const REEL_ITEMS = ["🎬", "🌍", "⛰️", "⚽", "🌊", "🎮", "🎵", "🏆", "🎲", "🔥"];
+// La strip gira tra le emoji delle vere categorie Top5 (niente più icone a
+// caso): quando arriveranno nuove categorie compariranno automaticamente qui.
+const REEL_ITEMS = TOP5_CATEGORIES.map((c) => c.emoji);
 
 export function Top5Wheel({ isMine, playerName }: Props) {
   return (

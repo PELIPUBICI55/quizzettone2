@@ -184,9 +184,16 @@ export interface QuizResultPayload {
   coinsAwarded: number;
 }
 
+export interface Top5CategoryDef {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 export interface Top5Def {
   id: string;
   title: string;
+  category?: string; // Top5CategoryDef["id"], collega la classifica alla sua categoria
   answers: string[]; // esattamente 5: answers[0] = 1° posto ... answers[4] = 5° posto
   source?: string; // da dove viene la classifica, mostrata in fondo alla schermata di gioco
 }
@@ -305,7 +312,9 @@ export interface ServerToClientEvents {
   "quiz:question": (payload: QuizQuestionPayload) => void;
   "quiz:result": (payload: QuizResultPayload) => void;
   "top5:spin": (payload: { playerId: string; durationMs: number }) => void;
-  "top5:categoryDrawn": (payload: { playerId: string; title: string }) => void;
+  "top5:categoryDrawn": (
+    payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
+  ) => void;
   "top5:state": (payload: Top5State) => void;
   "top5:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
