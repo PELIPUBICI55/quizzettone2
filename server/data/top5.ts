@@ -288,6 +288,79 @@ export const TOP5_BANK: Top5Def[] = [
     source:
       "Dati Spotify riportati da varie testate (Sky TG24, Velvet Gossip, HipLatina); \"We Don't Talk About Bruno\" ha superato \"Let It Go\" dopo l'uscita di Encanto nel 2021",
   },
+  {
+    id: "top5-vg-goty",
+    title: "Ultimi 5 vincitori GOTY (The Game Awards)",
+    category: "videogiochi",
+    answers: [
+      "Clair Obscur: Expedition 33 (2025)",
+      "Astro Bot (2024)",
+      "Baldur's Gate 3 (2023)",
+      "Elden Ring (2022)",
+      "It Takes Two (2021)",
+    ],
+    source: "The Game Awards — albo d'oro ufficiale del Game of the Year",
+  },
+  {
+    id: "top5-vg-steam",
+    title: "Giochi più venduti di sempre su Steam",
+    category: "videogiochi",
+    answers: ["PUBG: Battlegrounds", "Terraria", "Garry's Mod", "Grand Theft Auto V", "Rust"],
+    source: "Stime aggregate di vendite su Steam (SteamDB / VG Insights), dati aggiornati a metà 2026",
+  },
+  {
+    id: "top5-vg-mario",
+    title: "Ultimi 5 videogiochi del mondo Mario usciti",
+    category: "videogiochi",
+    answers: [
+      "Super Mario Bros. Wonder – Nintendo Switch 2 Edition (2026)",
+      "Mario Tennis Fever (2026)",
+      "Donkey Kong Bananza (2025)",
+      "Mario Kart World (2025)",
+      "Mario & Luigi: Brothership (2024)",
+    ],
+    source: "Nintendo — calendario ufficiale delle uscite, ordine cronologico decrescente aggiornato a luglio 2026",
+  },
+  {
+    id: "top5-vg-console",
+    title: "Console più vendute di sempre",
+    category: "videogiochi",
+    answers: [
+      "PlayStation 2 – 160 milioni",
+      "Nintendo Switch – 155,37 milioni",
+      "Nintendo DS – 154,02 milioni",
+      "Game Boy / Game Boy Color – 118,69 milioni",
+      "PlayStation 4 – 117,2 milioni",
+    ],
+    source: "Wikipedia — List of best-selling game consoles, dati ufficiali dei produttori aggiornati a metà 2026",
+  },
+  {
+    id: "top5-vg-costosi",
+    title: "Videogiochi più costosi da produrre",
+    category: "videogiochi",
+    answers: [
+      "Grand Theft Auto VI – stimato 2 miliardi $",
+      "Star Citizen – oltre 650 milioni $ (crowdfunding continuo)",
+      "Cyberpunk 2077 – 498 milioni $",
+      "Call of Duty: Black Ops III – 450 milioni $",
+      "Grand Theft Auto V – 265 milioni $",
+    ],
+    source:
+      "Stime aggregate di budget di sviluppo e marketing riportate da stampa specializzata (IGN, Game Rant, Wikipedia); alcune cifre (es. GTA VI) sono stime non ufficiali",
+  },
+  {
+    id: "top5-vg-mappe",
+    title: "Mappe più grandi nei videogiochi",
+    category: "videogiochi",
+    answers: [
+      "Microsoft Flight Simulator – 510.000.000 km² (l'intera Terra)",
+      "Fuel – 18.130 km²",
+      "The Crew 2 – 5.700 km²",
+      "The Crew – 5.180 km²",
+      "The Elder Scrolls II: Daggerfall – 1.616 km²",
+    ],
+    source: "en.eloutput.com — classifica delle mappe open world più estese nei videogiochi",
+  },
 ];
 
 export function pickRandomTop5(): Top5Def {
@@ -295,9 +368,9 @@ export function pickRandomTop5(): Top5Def {
 }
 
 // Categorie effettivamente "attive", cioè con almeno una top5 pronta nel
-// mazzo. Per ora sono geografia, scienze, serie tv, film e musica; le
-// figurine di animali (1-6) sono ancora in attesa di essere assegnate a una
-// loro categoria.
+// mazzo. Per ora sono geografia, scienze, serie tv, film, musica e
+// videogiochi; le figurine di animali (1-6) sono ancora in attesa di essere
+// assegnate a una loro categoria.
 export function pickRandomCategory(): Top5CategoryDef {
   const activeCategories = TOP5_CATEGORIES.filter((c) =>
     TOP5_BANK.some((t) => t.category === c.id)
