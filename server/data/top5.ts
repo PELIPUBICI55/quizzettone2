@@ -78,6 +78,44 @@ export const TOP5_BANK: Top5Def[] = [
     source:
       "Classifica tradizionale (Guinness dei Primati/Enciclopedia Britannica); nota: è in corso un dibattito scientifico su chi sia davvero il più lungo tra Nilo e Rio delle Amazzoni",
   },
+  {
+    id: "top5-malattie-genetiche",
+    title: "Malattie genetiche più comuni",
+    answers: ["Ipercolesterolemia familiare", "Anemia falciforme", "Talassemia", "Fibrosi cistica", "Sindrome di Down"],
+    source:
+      "Stime di prevalenza comunemente citate in letteratura medica/genetica (non esiste una classifica ufficiale unica)",
+  },
+  {
+    id: "top5-primi-elementi",
+    title: "Primi 5 elementi della tavola periodica",
+    answers: ["Idrogeno", "Elio", "Litio", "Berillio", "Boro"],
+    source: "Tavola periodica IUPAC, ordinamento per numero atomico",
+  },
+  {
+    id: "top5-organi-pesanti",
+    title: "Organi più pesanti del corpo umano",
+    answers: ["Pelle", "Fegato", "Cervello", "Polmoni", "Cuore"],
+    source: "Dati comparati sul peso medio degli organi umani (studio Grandmaison 2001 e fonti medico-divulgative)",
+  },
+  {
+    id: "top5-metalli-conduttori",
+    title: "Metalli con la maggiore conduzione elettrica",
+    answers: ["Argento", "Rame", "Oro", "Alluminio", "Tungsteno"],
+    source: "Valori standard di conducibilità elettrica (S/m) — dati di fisica di riferimento",
+  },
+  {
+    id: "top5-scimmie-intelligenti",
+    title: "Scimmie più intelligenti",
+    answers: ["Scimpanzé", "Orango", "Bonobo", "Gorilla", "Scimmia cappuccina"],
+    source: "Studio comparativo Duke University (via Focus.it) e Istituto Jane Goodall Italia",
+  },
+  {
+    id: "top5-epidemie-morti",
+    title: "Epidemie con più morti",
+    answers: ["Vaiolo", "Peste Nera", "Influenza Spagnola", "Peste di Giustiniano", "HIV/AIDS"],
+    source:
+      "Stime storiche comparate (OMS e fonti storiche multiple) — i numeri esatti variano molto da fonte a fonte",
+  },
 ];
 
 export function pickRandomTop5(): Top5Def {
