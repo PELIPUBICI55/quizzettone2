@@ -690,7 +690,7 @@ export class GameSession {
     this.broadcastState(io);
   }
 
-
+  private resolveDirectionalAdvance(
     player: InternalPlayer,
     originNodeId: string,
     edgeId: string,
