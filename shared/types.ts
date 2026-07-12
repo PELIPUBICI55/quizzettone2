@@ -42,7 +42,16 @@ export type CardEffectType =
   | "gainFreeChest" // guadagna subito lo status baule gratis
   | "discardTwoRandomFromChosen" // fai scartare 2 figurine casuali a un giocatore a scelta
   | "gainDoubleWin" // guadagna lo status vincita raddoppiata
-  | "advanceThreeTiles"; // avanza di tre caselle
+  | "advanceThreeTiles" // avanza di tre caselle
+  | "moveChosenBackwardOne" // fai indietreggiare di una casella un giocatore a scelta
+  | "gain20Coins" // guadagna 20 monete
+  | "advanceOneTile" // avanza di una casella
+  | "gainOneShield" // guadagna uno scudo
+  | "gainRandomCommonCard" // ricevi una figurina comune casuale
+  | "gainFreePack" // guadagna subito lo status pacchetto gratis
+  | "extraRollThisTurn" // tira due volte il dado in questo turno
+  | "steal20Coins" // ruba 20 monete a un avversario a scelta
+  | "advanceTwoTiles"; // avanza di due caselle
 
 export interface CardEffectDef {
   type: CardEffectType;

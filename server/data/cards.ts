@@ -219,6 +219,112 @@ export const CARD_CATALOG: CardDef[] = (() => {
         isQuickEffect: false,
       },
     },
+    "card-16": {
+      name: "Firenze",
+      image: "/cards/firenze.webp",
+      description:
+        "Il luogo perfetto per trovarsi tutti insieme. TUTTI INSIEME, a meno che tu non sia in Puglia. In quel caso non sei invitato.",
+      effect: {
+        type: "moveChosenBackwardOne",
+        label: "Effetto rapido: fai indietreggiare un giocatore a scelta di una casella",
+        isQuickEffect: true,
+      },
+    },
+    "card-17": {
+      name: "Gaeta",
+      image: "/cards/gaeta.webp",
+      description: "Peggio di questo forse solo Gaza. FORSE.",
+      effect: {
+        type: "gain20Coins",
+        label: "Guadagna 20 monete",
+        isQuickEffect: false,
+      },
+    },
+    "card-18": {
+      name: "Il Focolare",
+      image: "/cards/il-focolare.webp",
+      description:
+        "Il Focolare è un luogo di ritrovo. Qui il fuoco è sempre acceso, le partite si giocano in compagnia e le risate fanno parte del rituale. Vieni dentro, avvicina una sedia al focolare.",
+      effect: {
+        type: "advanceOneTile",
+        label: "Effetto rapido: avanza di una casella",
+        isQuickEffect: true,
+      },
+    },
+    "card-19": {
+      name: "TfueBeppeVessicchio",
+      image: "/cards/tfuebeppevessicchio.webp",
+      description:
+        "Membro dei TFUE. Come dirige lui l'orchestra nessuno. Scammato nei giveaway, ma è troppo altolocato per queste baggianate.",
+      effect: {
+        type: "gainOneShield",
+        label: "Ottieni uno scudo",
+        isQuickEffect: false,
+      },
+    },
+    "card-20": {
+      name: "Nadia Toffa",
+      image: "/cards/nadia-toffa.webp",
+      description: "Grandissima giornalista, pilastro della community di Overwatch. Pace all'anima sua.",
+      effect: {
+        type: "gain20Coins",
+        label: "Guadagna 20 monete",
+        isQuickEffect: false,
+      },
+    },
+    "card-21": {
+      name: "Giveaway",
+      image: "/cards/giveaway.webp",
+      description:
+        "Puoi provare la fortuna se vuoi, tanto non vincerai mai. È TUTTO PILOTATO SVEGLIATI, SEI UNA PEDINA IN MANO AI POTENTI.",
+      effect: {
+        type: "gainRandomCommonCard",
+        label: "Ricevi una figurina comune casuale",
+        isQuickEffect: false,
+      },
+    },
+    "card-22": {
+      name: "Pullata su NTE",
+      image: "/cards/pullata-su-nte.webp",
+      description:
+        "Cosa c'è di meglio di passare un mese a farmare monete su un gioco inutile per sperare di trovare skin inutili? Qualsiasi altra cosa, ma sei libero di scegliere come passare il tuo tempo..",
+      effect: {
+        type: "gainFreePack",
+        label: "Guadagna subito un Pacchetto gratis alla Cittadella",
+        isQuickEffect: false,
+      },
+    },
+    "card-23": {
+      name: "TheMaddierMarco",
+      image: "/cards/themaddiermarco.webp",
+      description: "Come fa MadMarco ad essere più mad? Fidati non vuoi scoprirlo.",
+      effect: {
+        type: "extraRollThisTurn",
+        label: "Tira due volte il dado in questo turno",
+        isQuickEffect: false,
+      },
+    },
+    "card-24": {
+      name: "Scrivania Segreta",
+      image: "/cards/scrivania-segreta.webp",
+      description: "Un tempo un luogo sicuro per le ragazze in pericolo. Poi Frost ha trovato anche questo.",
+      effect: {
+        type: "steal20Coins",
+        label: "Ruba 20 monete a un giocatore a scelta",
+        isQuickEffect: false,
+      },
+    },
+    "card-25": {
+      name: "I Pirati",
+      image: "/cards/i-pirati.webp",
+      description:
+        "Ripudiati da chi non capisce o non vuole vincere. NON TUTTI CAPISCONO LA POTENZA, ALCUNI SONO DESTINATI ALL'ETERNO FALLIMENTO.",
+      effect: {
+        type: "advanceTwoTiles",
+        label: "Avanza di due caselle",
+        isQuickEffect: false,
+      },
+    },
   };
 
   return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));
