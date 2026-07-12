@@ -212,6 +212,36 @@ export interface Top5State {
   fullAnswers?: string[]; // presente SOLO nella versione mandata all'host
 }
 
+// --- Mondo "officina" (CARO AMICO TI SCRIVO) --------------------------------
+// Come la Top5, ma invece di una classifica si estrae una PERSONA dalla
+// ruota: il giocatore deve indovinare a voce la SUA risposta a una domanda
+// personale. Per questo motivo il giocatore sceglie prima quale persona è
+// lui stesso, così la ruota non lo mette mai a rispondere a una domanda di
+// cui già conosce la risposta.
+
+export interface CaroAmicoPersonaDef {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
+export interface CaroAmicoDomandaDef {
+  id: string;
+  question: string;
+  answers: Record<string, string>; // personaId -> risposta corretta di quella persona
+}
+
+export interface CaroAmicoState {
+  playerId: string; // chi sta rispondendo
+  personaId: string;
+  personaName: string;
+  personaEmoji: string;
+  question: string;
+  revealed: boolean; // true dopo che l'host ha confermato la risposta detta a voce
+  answer: string | null; // valorizzata solo quando revealed è true
+  fullAnswer?: string; // presente SOLO nella versione mandata all'host, sempre valorizzata
+}
+
 export interface PackOpenedPayload {
   packId: string;
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
@@ -296,6 +326,10 @@ export interface ClientToServerEvents {
   "top5:breakHeart": () => void;
   "top5:resolve": (payload: { won: boolean }) => void;
   "top5:beginGame": () => void;
+  "caroamico:chooseSelf": (payload: { personaId: string | null }) => void;
+  "caroamico:beginGame": () => void;
+  "caroamico:reveal": () => void;
+  "caroamico:resolve": (payload: { won: boolean }) => void;
 }
 
 // Eventi server -> client
@@ -317,6 +351,15 @@ export interface ServerToClientEvents {
   ) => void;
   "top5:state": (payload: Top5State) => void;
   "top5:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
+  "caroamico:selfChoicePrompt": (
+    payload: { playerId: string; personas: CaroAmicoPersonaDef[]; currentSelfId: string | null }
+  ) => void;
+  "caroamico:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "caroamico:personaDrawn": (
+    payload: { playerId: string; personaId: string; personaName: string; personaEmoji: string }
+  ) => void;
+  "caroamico:state": (payload: CaroAmicoState) => void;
+  "caroamico:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
   "error:message": (payload: { message: string }) => void;
   "party:kicked": () => void;

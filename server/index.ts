@@ -101,6 +101,34 @@ io.on("connection", (socket) => {
     session?.beginTop5Game(loc.playerId, io);
   });
 
+  socket.on("caroamico:chooseSelf", ({ personaId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.chooseCaroAmicoSelf(loc.playerId, personaId, io);
+  });
+
+  socket.on("caroamico:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginCaroAmicoGame(loc.playerId, io);
+  });
+
+  socket.on("caroamico:reveal", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.revealCaroAmicoAnswer(loc.playerId, io);
+  });
+
+  socket.on("caroamico:resolve", ({ won }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveCaroAmico(loc.playerId, won, io);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

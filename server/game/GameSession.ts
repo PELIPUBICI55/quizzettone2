@@ -3,6 +3,8 @@ import type {
   BoardPosition,
   CardDef,
   CardEffectType,
+  CaroAmicoDomandaDef,
+  CaroAmicoPersonaDef,
   ClientToServerEvents,
   GameStateSnapshot,
   OwnedCard,
@@ -25,6 +27,8 @@ import {
 } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
 import { pickRandomCategory, pickRandomTop5InCategory } from "../data/top5.js";
+import { CARO_AMICO_PERSONE } from "../../shared/caroAmicoPersone.js";
+import { pickRandomPersonaExcluding, pickRandomDomanda } from "../data/caroAmico.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -82,10 +86,19 @@ interface InternalPlayer {
   awaitingTop5Start: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
   forcedNextCategory: string | null; // categoria scelta per il prossimo quiz (Nuvola)
   pendingShieldContext: PendingShieldContext | null; // in attesa che decida se usare uno scudo
+  caroAmicoSelfId: string | null; // quale persona rappresenta questo giocatore nel mondo "officina": la ruota non la estrarrà mai per lui
+  awaitingCaroAmicoSelfChoice: boolean; // sul menu "chi sei tu?" prima della ruota di CARO AMICO TI SCRIVO
+  pendingCaroAmico: {
+    domanda: CaroAmicoDomandaDef;
+    persona: CaroAmicoPersonaDef;
+    revealed: boolean;
+  } | null;
+  awaitingCaroAmicoStart: boolean; // sulla schermata di conferma persona pescata, in attesa che clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
 const TOP5_REWARD = 100;
+const CARO_AMICO_REWARD = 80;
 const WRONG_REWARD = 0;
 
 let playerIdCounter = 0;
@@ -164,6 +177,10 @@ export class GameSession {
       pendingTop5: null,
       awaitingTop5Start: false,
       forcedNextCategory: null,
+      caroAmicoSelfId: null,
+      awaitingCaroAmicoSelfChoice: false,
+      pendingCaroAmico: null,
+      awaitingCaroAmicoStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -233,6 +250,43 @@ export class GameSession {
         heartsBroken,
         source: def.source,
         fullAnswers: player.isHost ? def.answers : undefined,
+      });
+    }
+
+    // Stessa cosa per "Caro amico ti scrivo" (mondo "officina"): menu di
+    // scelta persona, schermata di conferma persona pescata, o vista di
+    // gioco (completa se è l'host, altrimenti nascosta).
+    const caroAmicoSelfPlayer = [...this.players.values()].find(
+      (p) => p.id === player.id && p.awaitingCaroAmicoSelfChoice
+    );
+    if (caroAmicoSelfPlayer) {
+      io.to(player.socketId).emit("caroamico:selfChoicePrompt", {
+        playerId: player.id,
+        personas: CARO_AMICO_PERSONE,
+        currentSelfId: player.caroAmicoSelfId,
+      });
+    }
+    const caroAmicoPlayer = [...this.players.values()].find((p) => p.pendingCaroAmico);
+    if (caroAmicoPlayer?.awaitingCaroAmicoStart) {
+      const { persona } = caroAmicoPlayer.pendingCaroAmico!;
+      io.to(player.socketId).emit("caroamico:personaDrawn", {
+        playerId: caroAmicoPlayer.id,
+        personaId: persona.id,
+        personaName: persona.name,
+        personaEmoji: persona.emoji,
+      });
+    } else if (caroAmicoPlayer?.pendingCaroAmico) {
+      const { domanda, persona, revealed } = caroAmicoPlayer.pendingCaroAmico;
+      const correctAnswer = domanda.answers[persona.id];
+      io.to(player.socketId).emit("caroamico:state", {
+        playerId: caroAmicoPlayer.id,
+        personaId: persona.id,
+        personaName: persona.name,
+        personaEmoji: persona.emoji,
+        question: domanda.question,
+        revealed,
+        answer: revealed ? correctAnswer : null,
+        fullAnswer: player.isHost ? correctAnswer : undefined,
       });
     }
   }
@@ -1323,6 +1377,14 @@ export class GameSession {
       return;
     }
 
+    // Anche il mondo "officina" (CARO AMICO TI SCRIVO) ha una meccanica
+    // dedicata: prima chiede al giocatore chi è lui tra le persone della
+    // ruota, poi estrae una persona diversa da lui e una domanda.
+    if (worldId === "officina") {
+      this.beginCaroAmico(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -1475,6 +1537,154 @@ export class GameSession {
     target.pendingWorldId = null;
 
     io.emit("top5:ended", { playerId: target.id, won, coinsAwarded });
+    this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+
+  // Avvia il minigioco "Caro amico ti scrivo" (mondo "officina"): prima di
+  // tutto chiede al giocatore quale persona tra quelle della ruota è lui
+  // stesso, così la ruota non lo mette mai a rispondere a una domanda di cui
+  // già conosce la risposta.
+  private beginCaroAmico(player: InternalPlayer, io: IOServer) {
+    player.awaitingCaroAmicoSelfChoice = true;
+    io.emit("caroamico:selfChoicePrompt", {
+      playerId: player.id,
+      personas: CARO_AMICO_PERSONE,
+      currentSelfId: player.caroAmicoSelfId,
+    });
+  }
+
+  // Il giocatore conferma quale persona è lui stesso (o nessuna, se non è
+  // tra quelle elencate): la scelta resta memorizzata per le prossime volte
+  // che capiterà su questo mondo, poi si passa alla ruota vera e propria.
+  chooseCaroAmicoSelf(playerId: string, personaId: string | null, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingCaroAmicoSelfChoice) return;
+    player.awaitingCaroAmicoSelfChoice = false;
+    player.caroAmicoSelfId = personaId;
+    this.drawCaroAmicoRound(player, io);
+  }
+
+  // Pesca una persona (mai quella scelta come "sé stesso") e una domanda a
+  // caso, mostra l'animazione della ruota, poi rivela la persona pescata a
+  // tutti.
+  private drawCaroAmicoRound(player: InternalPlayer, io: IOServer) {
+    const persona = pickRandomPersonaExcluding(player.caroAmicoSelfId);
+    const domanda = pickRandomDomanda();
+    player.pendingCaroAmico = { domanda, persona, revealed: false };
+    const durationMs = 2600;
+
+    io.emit("caroamico:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingCaroAmico || player.pendingCaroAmico.persona.id !== persona.id) return;
+      player.awaitingCaroAmicoStart = true;
+      io.emit("caroamico:personaDrawn", {
+        playerId: player.id,
+        personaId: persona.id,
+        personaName: persona.name,
+        personaEmoji: persona.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Conferma la persona pescata e apre davvero la schermata con la domanda
+  // (risposta nascosta finché l'host non la rivela).
+  beginCaroAmicoGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingCaroAmicoStart) return;
+    player.awaitingCaroAmicoStart = false;
+    this.broadcastCaroAmicoState(player, io);
+  }
+
+  // Manda lo stato della domanda a tutti (risposta nascosta finché non
+  // rivelata) e, in aggiunta, la versione completa solo all'host.
+  private broadcastCaroAmicoState(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingCaroAmico) return;
+    const { domanda, persona, revealed } = player.pendingCaroAmico;
+    const correctAnswer = domanda.answers[persona.id];
+
+    io.emit("caroamico:state", {
+      playerId: player.id,
+      personaId: persona.id,
+      personaName: persona.name,
+      personaEmoji: persona.emoji,
+      question: domanda.question,
+      revealed,
+      answer: revealed ? correctAnswer : null,
+    });
+
+    const host = [...this.players.values()].find((p) => p.isHost);
+    if (host) {
+      io.to(host.socketId).emit("caroamico:state", {
+        playerId: player.id,
+        personaId: persona.id,
+        personaName: persona.name,
+        personaEmoji: persona.emoji,
+        question: domanda.question,
+        revealed,
+        answer: revealed ? correctAnswer : null,
+        fullAnswer: correctAnswer,
+      });
+    }
+  }
+
+  // Solo l'host può rivelare la risposta corretta (dopo che il giocatore di
+  // turno l'ha detta a voce).
+  revealCaroAmicoAnswer(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingCaroAmico);
+    if (!target?.pendingCaroAmico) return;
+    target.pendingCaroAmico.revealed = true;
+    this.broadcastCaroAmicoState(target, io);
+  }
+
+  // Solo l'host decreta l'esito: vittoria assegna le monete (con gli stessi
+  // status/passivi degli altri minigiochi), sconfitta no.
+  resolveCaroAmico(hostId: string, won: boolean, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingCaroAmico);
+    if (!target?.pendingCaroAmico) return;
+
+    target.pendingCaroAmico = null;
+
+    // figurine con effetto passivo: si applicano da sole alla fine di ogni gioco
+    this.applyPassiveCardEffects(target);
+
+    let coinsAwarded = won ? CARO_AMICO_REWARD : 0;
+
+    const doubleIdx = target.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      coinsAwarded *= 2;
+      target.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = target.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      coinsAwarded *= 3;
+      target.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = target.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      coinsAwarded = Math.floor(coinsAwarded / 2);
+      target.statuses.splice(halveIdx, 1);
+    }
+
+    target.coins += coinsAwarded;
+    target.pendingWorldId = null;
+
+    io.emit("caroamico:ended", { playerId: target.id, won, coinsAwarded });
     this.maybeAdvanceTurn(target, io);
     this.broadcastState(io);
   }

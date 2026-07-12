@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  CaroAmicoPersonaDef,
+  CaroAmicoState,
   ChooseTargetPayload,
   GameStateSnapshot,
   MinigameType,
@@ -17,6 +19,10 @@ import { WheelResultScreen } from "./components/WheelResultScreen";
 import { Top5Wheel } from "./components/Top5Wheel";
 import { Top5CategoryReveal } from "./components/Top5CategoryReveal";
 import { Top5Game } from "./components/Top5Game";
+import { CaroAmicoSelfChoice } from "./components/CaroAmicoSelfChoice";
+import { CaroAmicoWheel } from "./components/CaroAmicoWheel";
+import { CaroAmicoPersonaReveal } from "./components/CaroAmicoPersonaReveal";
+import { CaroAmicoGame } from "./components/CaroAmicoGame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
 import { ShieldPromptScreen } from "./components/ShieldPromptScreen";
@@ -55,6 +61,22 @@ export default function App() {
     categoryEmoji: string;
   } | null>(null);
   const [top5State, setTop5State] = useState<Top5State | null>(null);
+  const [caroAmicoSelfChoiceInfo, setCaroAmicoSelfChoiceInfo] = useState<{
+    playerId: string;
+    personas: CaroAmicoPersonaDef[];
+    currentSelfId: string | null;
+  } | null>(null);
+  const [caroAmicoSpinInfo, setCaroAmicoSpinInfo] = useState<{
+    playerId: string;
+    durationMs: number;
+  } | null>(null);
+  const [caroAmicoPersonaInfo, setCaroAmicoPersonaInfo] = useState<{
+    playerId: string;
+    personaId: string;
+    personaName: string;
+    personaEmoji: string;
+  } | null>(null);
+  const [caroAmicoState, setCaroAmicoState] = useState<CaroAmicoState | null>(null);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
   const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; text: string; effectLabel: string } | null>(
     null
@@ -80,6 +102,10 @@ export default function App() {
       setQuizResult(null);
       setTop5SpinInfo(null);
       setTop5State(null);
+      setCaroAmicoSelfChoiceInfo(null);
+      setCaroAmicoSpinInfo(null);
+      setCaroAmicoPersonaInfo(null);
+      setCaroAmicoState(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
       setWelcomeInfo(null);
@@ -124,6 +150,43 @@ export default function App() {
       setTop5SpinInfo(null);
       setTop5CategoryInfo(null);
     };
+    const onCaroAmicoSelfChoice = (p: {
+      playerId: string;
+      personas: CaroAmicoPersonaDef[];
+      currentSelfId: string | null;
+    }) => {
+      setWelcomeInfo(null);
+      setCaroAmicoSelfChoiceInfo(p);
+      setCaroAmicoSpinInfo(null);
+      setCaroAmicoPersonaInfo(null);
+      setCaroAmicoState(null);
+    };
+    const onCaroAmicoSpin = (p: { playerId: string; durationMs: number }) => {
+      setCaroAmicoSelfChoiceInfo(null);
+      setCaroAmicoSpinInfo(p);
+      setCaroAmicoPersonaInfo(null);
+      setCaroAmicoState(null);
+    };
+    const onCaroAmicoPersona = (p: {
+      playerId: string;
+      personaId: string;
+      personaName: string;
+      personaEmoji: string;
+    }) => {
+      setCaroAmicoSpinInfo(null);
+      setCaroAmicoPersonaInfo(p);
+      setCaroAmicoState(null);
+    };
+    const onCaroAmicoState = (p: CaroAmicoState) => {
+      setCaroAmicoSpinInfo(null);
+      setCaroAmicoPersonaInfo(null);
+      setCaroAmicoState(p);
+    };
+    const onCaroAmicoEnded = () => {
+      setCaroAmicoState(null);
+      setCaroAmicoSpinInfo(null);
+      setCaroAmicoPersonaInfo(null);
+    };
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
       setSurpriseInfo(p);
@@ -151,6 +214,11 @@ export default function App() {
     socket.on("top5:categoryDrawn", onTop5Category);
     socket.on("top5:state", onTop5State);
     socket.on("top5:ended", onTop5Ended);
+    socket.on("caroamico:selfChoicePrompt", onCaroAmicoSelfChoice);
+    socket.on("caroamico:spin", onCaroAmicoSpin);
+    socket.on("caroamico:personaDrawn", onCaroAmicoPersona);
+    socket.on("caroamico:state", onCaroAmicoState);
+    socket.on("caroamico:ended", onCaroAmicoEnded);
     socket.on("shop:packOpened", onPack);
     socket.on("board:surpriseDrawn", onSurpriseDrawn);
     socket.on("board:chooseTarget", onChooseTarget);
@@ -171,6 +239,11 @@ export default function App() {
       socket.off("top5:categoryDrawn", onTop5Category);
       socket.off("top5:state", onTop5State);
       socket.off("top5:ended", onTop5Ended);
+      socket.off("caroamico:selfChoicePrompt", onCaroAmicoSelfChoice);
+      socket.off("caroamico:spin", onCaroAmicoSpin);
+      socket.off("caroamico:personaDrawn", onCaroAmicoPersona);
+      socket.off("caroamico:state", onCaroAmicoState);
+      socket.off("caroamico:ended", onCaroAmicoEnded);
       socket.off("shop:packOpened", onPack);
       socket.off("board:surpriseDrawn", onSurpriseDrawn);
       socket.off("board:chooseTarget", onChooseTarget);
@@ -193,6 +266,10 @@ export default function App() {
     setTop5SpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setTop5CategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setTop5State((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setCaroAmicoSelfChoiceInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setCaroAmicoSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setCaroAmicoPersonaInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setCaroAmicoState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -266,6 +343,14 @@ export default function App() {
   const top5SpinPlayer = state.players.find((p) => p.id === top5SpinInfo?.playerId);
   const top5CategoryPlayer = state.players.find((p) => p.id === top5CategoryInfo?.playerId);
   const top5StatePlayer = state.players.find((p) => p.id === top5State?.playerId);
+  const caroAmicoSelfChoicePlayer = state.players.find(
+    (p) => p.id === caroAmicoSelfChoiceInfo?.playerId
+  );
+  const caroAmicoSpinPlayer = state.players.find((p) => p.id === caroAmicoSpinInfo?.playerId);
+  const caroAmicoPersonaPlayer = state.players.find(
+    (p) => p.id === caroAmicoPersonaInfo?.playerId
+  );
+  const caroAmicoStatePlayer = state.players.find((p) => p.id === caroAmicoState?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -294,6 +379,31 @@ export default function App() {
             world={currentWorld}
             isMine={welcomeInfo.playerId === state.me.id}
             playerName={welcomePlayer?.name ?? "?"}
+          />
+        ) : caroAmicoSelfChoiceInfo ? (
+          <CaroAmicoSelfChoice
+            personas={caroAmicoSelfChoiceInfo.personas}
+            currentSelfId={caroAmicoSelfChoiceInfo.currentSelfId}
+            isMine={caroAmicoSelfChoiceInfo.playerId === state.me.id}
+            playerName={caroAmicoSelfChoicePlayer?.name ?? "?"}
+          />
+        ) : caroAmicoSpinInfo ? (
+          <CaroAmicoWheel
+            isMine={caroAmicoSpinInfo.playerId === state.me.id}
+            playerName={caroAmicoSpinPlayer?.name ?? "?"}
+          />
+        ) : caroAmicoPersonaInfo ? (
+          <CaroAmicoPersonaReveal
+            personaName={caroAmicoPersonaInfo.personaName}
+            personaEmoji={caroAmicoPersonaInfo.personaEmoji}
+            isMine={caroAmicoPersonaInfo.playerId === state.me.id}
+            playerName={caroAmicoPersonaPlayer?.name ?? "?"}
+          />
+        ) : caroAmicoState ? (
+          <CaroAmicoGame
+            state={caroAmicoState}
+            isHost={state.me.isHost}
+            playerName={caroAmicoStatePlayer?.name ?? "?"}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel
