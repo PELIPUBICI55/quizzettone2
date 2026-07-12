@@ -112,6 +112,11 @@ export class GameSession {
   private turnOrder: string[] = [];
   private currentTurnIndex = 0;
   private phase: "lobby" | "playing" = "lobby";
+  // Id delle top5 già giocate in questa partita: una volta pescata, una top5
+  // non deve più poter ricapitare finché la partita è in corso (vedi
+  // beginTop5 più sotto, e pickRandomCategory/pickRandomTop5InCategory in
+  // server/data/top5.ts che la usano per escludere le top5 già viste).
+  private playedTop5Ids = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -1336,12 +1341,15 @@ export class GameSession {
     }, durationMs);
   }
 
-  // Avvia il minigioco Top 5: pesca una categoria, mostra l'animazione della
-  // ruota verticale, poi rivela lo stato (nascosto per i giocatori, completo
-  // per l'host) a tutti.
+  // Avvia il minigioco Top 5: pesca una categoria e una top5 (escludendo
+  // quelle già giocate in questa partita), mostra l'animazione della ruota
+  // verticale, poi rivela lo stato (nascosto per i giocatori, completo per
+  // l'host) a tutti. La top5 pescata viene subito segnata come "giocata" in
+  // playedTop5Ids, così non potrà ripresentarsi finché dura la partita.
   private beginTop5(player: InternalPlayer, io: IOServer) {
-    const category = pickRandomCategory();
-    const def = pickRandomTop5InCategory(category.id);
+    const category = pickRandomCategory(this.playedTop5Ids);
+    const def = pickRandomTop5InCategory(category.id, this.playedTop5Ids);
+    this.playedTop5Ids.add(def.id);
     player.pendingTop5 = {
       def,
       category,

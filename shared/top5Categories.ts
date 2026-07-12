@@ -11,4 +11,5 @@ export const TOP5_CATEGORIES: Top5CategoryDef[] = [
   { id: "film", name: "Film", emoji: "🎬" },
   { id: "musica", name: "Musica", emoji: "🎵" },
   { id: "videogiochi", name: "Videogiochi", emoji: "🎮" },
+  { id: "sport", name: "Sport", emoji: "⚽" },
 ];

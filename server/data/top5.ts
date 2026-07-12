@@ -361,6 +361,89 @@ export const TOP5_BANK: Top5Def[] = [
     ],
     source: "en.eloutput.com — classifica delle mappe open world più estese nei videogiochi",
   },
+  {
+    id: "top5-sport-pallone-oro",
+    title: "Ultimi 5 Palloni d'Oro diversi",
+    category: "sport",
+    answers: [
+      "Ousmane Dembélé (2025)",
+      "Rodri (2024)",
+      "Lionel Messi (2023)",
+      "Karim Benzema (2022)",
+      "Luka Modrić (2018)",
+    ],
+    source:
+      "France Football / UEFA — albo d'oro del Pallone d'Oro; esclusi i vincitori ripetuti (Messi anche nel 2021 e 2019) e l'edizione 2020, non assegnata per la pandemia",
+  },
+  {
+    id: "top5-sport-mondiali-calcio",
+    title: "Nazioni con più Mondiali di calcio vinti",
+    category: "sport",
+    answers: [
+      "Brasile – 5 titoli",
+      "Germania – 4 titoli",
+      "Italia – 4 titoli",
+      "Argentina – 3 titoli",
+      "Francia – 2 titoli",
+    ],
+    source:
+      "FIFA — albo d'oro dei Campionati del Mondo di calcio, aggiornato al 2026; Germania e Italia a pari merito con 4 titoli, Francia a pari merito con l'Uruguay con 2 titoli",
+  },
+  {
+    id: "top5-sport-champions",
+    title: "Squadre con più Champions League vinte",
+    category: "sport",
+    answers: [
+      "Real Madrid – 15",
+      "Milan – 7",
+      "Bayern Monaco – 6",
+      "Liverpool – 6",
+      "Barcellona – 5",
+    ],
+    source:
+      "UEFA — albo d'oro della Champions League, aggiornato dopo la finale 2025-2026 vinta dal Paris Saint-Germain; Bayern Monaco e Liverpool a pari merito con 6 titoli",
+  },
+  {
+    id: "top5-sport-titoli-nazionali",
+    title: "Squadre con più titoli nazionali (Top 5 campionati europei)",
+    category: "sport",
+    answers: [
+      "Juventus – 36 (Serie A)",
+      "Real Madrid – 35 (Liga)",
+      "Bayern Monaco – 33 (Bundesliga)",
+      "Barcellona – 27 (Liga)",
+      "Manchester United – 20 (Premier League)",
+    ],
+    source: "Dati aggregati sui titoli nazionali vinti nei Big 5 campionati europei (Calciomercato.com e fonti storiche ufficiali)",
+  },
+  {
+    id: "top5-sport-medaglie-olimpiche",
+    title: "Atleti con più medaglie olimpiche",
+    category: "sport",
+    answers: [
+      "Michael Phelps – 28 (nuoto)",
+      "Larisa Latynina – 18 (ginnastica)",
+      "Nikolaj Andrianov – 15 (ginnastica)",
+      "Boris Shakhlin – 13 (ginnastica)",
+      "Edoardo Mangiarotti – 13 (scherma)",
+    ],
+    source:
+      "Wikipedia — List of multiple Olympic medalists; Boris Shakhlin è a pari merito con Edoardo Mangiarotti e con il ginnasta giapponese Takashi Ono, tutti a 13 medaglie",
+  },
+  {
+    id: "top5-sport-mondiali-pallavolo",
+    title: "Nazioni con più Mondiali di pallavolo (maschile)",
+    category: "sport",
+    answers: [
+      "Unione Sovietica – 6 titoli",
+      "Italia – 5 titoli",
+      "Brasile – 3 titoli",
+      "Polonia – 3 titoli",
+      "Cecoslovacchia – 2 titoli",
+    ],
+    source:
+      "FIVB / Wikipedia — albo d'oro del Campionato mondiale maschile di pallavolo, aggiornato dopo la vittoria dell'Italia nelle Filippine nel settembre 2025 (quinto titolo azzurro, secondo consecutivo); Brasile e Polonia a pari merito con 3 titoli",
+  },
 ];
 
 export function pickRandomTop5(): Top5Def {
@@ -368,10 +451,24 @@ export function pickRandomTop5(): Top5Def {
 }
 
 // Categorie effettivamente "attive", cioè con almeno una top5 pronta nel
-// mazzo. Per ora sono geografia, scienze, serie tv, film, musica e
-// videogiochi; le figurine di animali (1-6) sono ancora in attesa di essere
-// assegnate a una loro categoria.
-export function pickRandomCategory(): Top5CategoryDef {
+// mazzo. Per ora sono geografia, scienze, serie tv, film, musica,
+// videogiochi e sport; le figurine di animali (1-6) sono ancora in attesa
+// di essere assegnate a una loro categoria.
+//
+// excludedIds permette di escludere le top5 già giocate in questa partita
+// (vedi GameSession.playedTop5Ids, in server/game/GameSession.ts): una
+// categoria è "attiva" solo se ha ancora almeno una top5 NON esclusa. Se
+// tutte le top5 di tutte le categorie sono già state giocate (mazzo
+// esaurito), si ricomincia daccapo ignorando l'esclusione invece di
+// bloccare il gioco.
+export function pickRandomCategory(excludedIds: ReadonlySet<string> = new Set()): Top5CategoryDef {
+  const categoriesWithFreshTop5 = TOP5_CATEGORIES.filter((c) =>
+    TOP5_BANK.some((t) => t.category === c.id && !excludedIds.has(t.id))
+  );
+  if (categoriesWithFreshTop5.length > 0) {
+    return categoriesWithFreshTop5[Math.floor(Math.random() * categoriesWithFreshTop5.length)];
+  }
+  // mazzo esaurito (o nessuna categoria ancora popolata): fallback ignorando l'esclusione
   const activeCategories = TOP5_CATEGORIES.filter((c) =>
     TOP5_BANK.some((t) => t.category === c.id)
   );
@@ -379,8 +476,16 @@ export function pickRandomCategory(): Top5CategoryDef {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export function pickRandomTop5InCategory(categoryId: string): Top5Def {
+// Pesca una top5 della categoria indicata, escludendo quelle già giocate in
+// questa partita. Se la categoria non ha più top5 "fresche" (mazzo di
+// quella categoria esaurito) ricade su quelle già giocate della stessa
+// categoria, così il gioco non si blocca mai.
+export function pickRandomTop5InCategory(
+  categoryId: string,
+  excludedIds: ReadonlySet<string> = new Set()
+): Top5Def {
   const inCategory = TOP5_BANK.filter((t) => t.category === categoryId);
-  const pool = inCategory.length > 0 ? inCategory : TOP5_BANK;
+  const fresh = inCategory.filter((t) => !excludedIds.has(t.id));
+  const pool = fresh.length > 0 ? fresh : inCategory.length > 0 ? inCategory : TOP5_BANK;
   return pool[Math.floor(Math.random() * pool.length)];
 }
