@@ -38,6 +38,46 @@ export const TOP5_BANK: Top5Def[] = [
     source:
       "Non esiste una classifica statistica ufficiale unica: elenco basato sul consenso comune tra le principali guide di zoo nel mondo",
   },
+  {
+    id: "top5-altitudine-media",
+    title: "Nazioni con l'altezza media dal livello del mare più alta",
+    answers: ["Bhutan", "Nepal", "Lesotho", "Andorra", "Afghanistan"],
+    source: "Dati comparati sull'altitudine media nazionale (World Atlas / Ripley's Believe It or Not)",
+  },
+  {
+    id: "top5-nazioni-popolose",
+    title: "Nazioni più popolose",
+    answers: ["India", "Cina", "Stati Uniti", "Indonesia", "Pakistan"],
+    source: "ONU – World Population Prospects, dati aggiornati al 2026 (via Worldometer)",
+  },
+  {
+    id: "top5-qi-alto",
+    title: "Nazioni con il QI più alto",
+    answers: ["Giappone", "Taiwan", "Singapore", "Hong Kong", "Cina"],
+    source:
+      "Dataset Lynn & Vanhanen — metodologia ampiamente contestata dalla comunità scientifica per campioni non rappresentativi: da prendere con le pinze",
+  },
+  {
+    id: "top5-pene-grande",
+    title: "Nazioni con il pene più grande",
+    answers: ["Ecuador", "Camerun", "Bolivia", "Sudan", "Haiti"],
+    source:
+      "Mappa virale ripresa da Daily Mail/World Data — dati in gran parte autodichiarati e non verificabili in modo indipendente: puro intrattenimento, non prendetela sul serio",
+  },
+  {
+    id: "top5-seno-grosso",
+    title: "Nazioni con il seno più grosso",
+    answers: ["Russia", "Finlandia", "Svezia", "Norvegia", "Germania"],
+    source:
+      "Mappa virale di TargetMap.com — dati aneddotici e non verificabili: puro intrattenimento, non prendetela sul serio",
+  },
+  {
+    id: "top5-fiumi-lunghi",
+    title: "Fiumi più lunghi",
+    answers: ["Nilo", "Rio delle Amazzoni", "Fiume Azzurro (Yangtze)", "Mississippi-Missouri", "Fiume Giallo (Huang He)"],
+    source:
+      "Classifica tradizionale (Guinness dei Primati/Enciclopedia Britannica); nota: è in corso un dibattito scientifico su chi sia davvero il più lungo tra Nilo e Rio delle Amazzoni",
+  },
 ];
 
 export function pickRandomTop5(): Top5Def {
