@@ -441,6 +441,7 @@ export default function App() {
             world={currentWorld}
             isMine={welcomeInfo.playerId === state.me.id}
             playerName={welcomePlayer?.name ?? "?"}
+            players={state.players}
           />
         ) : caroAmicoSelfChoiceInfo ? (
           <CaroAmicoSelfChoice
