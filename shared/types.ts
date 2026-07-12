@@ -242,6 +242,62 @@ export interface CaroAmicoState {
   fullAnswer?: string; // presente SOLO nella versione mandata all'host, sempre valorizzata
 }
 
+// --- Mondo "abisso" (TCT) ------------------------------------------------
+// Quiz a tempo tutti-contro-tutti: partecipano automaticamente tutti i
+// giocatori connessi con almeno 100 monete, che vengono scalate e formano
+// il montepremi. Si gioca su 4 domande pescate a caso (10 secondi a testa,
+// 4 opzioni): chi risponde correttamente più in fretta guadagna più punti.
+// A fine partita il montepremi va a chi ha totalizzato più punti (diviso
+// equamente in caso di pareggio).
+
+export interface TctQuestionPublic {
+  question: string;
+  options: string[]; // esattamente 4, correctIndex non incluso
+}
+
+export interface TctQuestionPayload {
+  questionIndex: number; // 0-based
+  totalQuestions: number;
+  question: TctQuestionPublic;
+  timeLimitSec: number;
+  participantIds: string[]; // chi sta giocando questo turno di TCT
+}
+
+export interface TctAnswerResultEntry {
+  playerId: string;
+  correct: boolean;
+  pointsAwarded: number;
+}
+
+export interface TctQuestionResultPayload {
+  questionIndex: number;
+  correctIndex: number;
+  correctAnswerText: string;
+  results: TctAnswerResultEntry[];
+}
+
+export interface TctStanding {
+  playerId: string;
+  totalPoints: number;
+  coinsWon: number;
+}
+
+export interface TctEndedPayload {
+  standings: TctStanding[]; // ordinata per punti decrescenti
+  potTotal: number;
+  winnerIds: string[]; // più di uno se pari merito
+}
+
+export interface TctStartedPayload {
+  participantIds: string[];
+  potTotal: number;
+  entryFee: number;
+}
+
+export interface TctSkippedPayload {
+  reason: string; // es. "nessun giocatore ha abbastanza monete"
+}
+
 export interface PackOpenedPayload {
   packId: string;
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
@@ -330,6 +386,7 @@ export interface ClientToServerEvents {
   "caroamico:beginGame": () => void;
   "caroamico:reveal": () => void;
   "caroamico:resolve": (payload: { won: boolean }) => void;
+  "tct:answer": (payload: { answerIndex: number | null }) => void;
 }
 
 // Eventi server -> client
@@ -360,6 +417,11 @@ export interface ServerToClientEvents {
   ) => void;
   "caroamico:state": (payload: CaroAmicoState) => void;
   "caroamico:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
+  "tct:started": (payload: TctStartedPayload) => void;
+  "tct:question": (payload: TctQuestionPayload) => void;
+  "tct:questionResult": (payload: TctQuestionResultPayload) => void;
+  "tct:ended": (payload: TctEndedPayload) => void;
+  "tct:skipped": (payload: TctSkippedPayload) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
   "error:message": (payload: { message: string }) => void;
   "party:kicked": () => void;

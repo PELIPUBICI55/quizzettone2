@@ -129,6 +129,13 @@ io.on("connection", (socket) => {
     session?.resolveCaroAmico(loc.playerId, won, io);
   });
 
+  socket.on("tct:answer", ({ answerIndex }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.submitTctAnswer(loc.playerId, answerIndex, io);
+  });
+
   socket.on("board:roll", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

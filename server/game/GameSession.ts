@@ -29,6 +29,7 @@ import { drawRandomSurprise } from "../data/surprises.js";
 import { pickRandomCategory, pickRandomTop5InCategory } from "../data/top5.js";
 import { CARO_AMICO_PERSONE } from "../../shared/caroAmicoPersone.js";
 import { pickRandomPersonaExcluding, pickRandomDomanda } from "../data/caroAmico.js";
+import { pickRandomTctQuestions, TctQuestionInternal } from "../data/tct.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -52,6 +53,21 @@ interface PendingChoice {
 interface PendingShieldContext {
   message: string;
   resolve: (blocked: boolean) => void;
+}
+
+// Stato del round di TCT (mondo "abisso") in corso, se c'è: NON è legato a
+// un singolo giocatore come pendingTop5/pendingCaroAmico, perché è un
+// evento di partita che coinvolge contemporaneamente più giocatori.
+interface PendingTct {
+  triggeredByPlayerId: string; // chi ha fatto scattare l'evento atterrando sul mondo
+  participantIds: string[]; // giocatori con >=100 monete al momento dell'iscrizione
+  potTotal: number;
+  questions: TctQuestionInternal[]; // le domande pescate per questo round (di solito 4)
+  currentQuestionIndex: number; // -1 prima che inizi la prima domanda
+  currentAnswers: Map<string, { index: number; atMs: number }>; // risposte alla domanda corrente
+  questionStartedAt: number; // Date.now() di quando è partita la domanda corrente
+  timer: ReturnType<typeof setTimeout> | null;
+  totalPoints: Map<string, number>; // punteggio cumulato per giocatore
 }
 
 interface InternalPlayer {
@@ -100,6 +116,11 @@ const BASE_REWARD = 20;
 const TOP5_REWARD = 100;
 const CARO_AMICO_REWARD = 80;
 const WRONG_REWARD = 0;
+const TCT_ENTRY_FEE = 100;
+const TCT_QUESTION_COUNT = 4;
+const TCT_TIME_LIMIT_SEC = 10;
+const TCT_REVEAL_DELAY_MS = 3500;
+const TCT_INTRO_DELAY_MS = 2200;
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -130,6 +151,11 @@ export class GameSession {
   // beginTop5 più sotto, e pickRandomCategory/pickRandomTop5InCategory in
   // server/data/top5.ts che la usano per escludere le top5 già viste).
   private playedTop5Ids = new Set<string>();
+  // Round di TCT in corso (se c'è) e id delle domande TCT già uscite in
+  // questa partita, per lo stesso motivo di playedTop5Ids: non far mai
+  // ripetere la stessa domanda finché la partita è in corso.
+  private pendingTct: PendingTct | null = null;
+  private playedTctQuestionIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -288,6 +314,24 @@ export class GameSession {
         answer: revealed ? correctAnswer : null,
         fullAnswer: player.isHost ? correctAnswer : undefined,
       });
+    }
+
+    // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
+    // attualmente aperta a chi rientra (approssimando il tempo rimasto:
+    // non è perfettamente sincronizzato, ma il timer vero resta lato
+    // server ed è quello che conta davvero).
+    if (this.pendingTct && this.pendingTct.currentQuestionIndex >= 0) {
+      const tct = this.pendingTct;
+      const q = tct.questions[tct.currentQuestionIndex];
+      if (q) {
+        io.to(player.socketId).emit("tct:question", {
+          questionIndex: tct.currentQuestionIndex,
+          totalQuestions: tct.questions.length,
+          question: { question: q.question, options: q.options },
+          timeLimitSec: TCT_TIME_LIMIT_SEC,
+          participantIds: tct.participantIds,
+        });
+      }
     }
   }
 
@@ -1385,6 +1429,14 @@ export class GameSession {
       return;
     }
 
+    // Anche il mondo "abisso" (TCT) ha una meccanica dedicata: un quiz a
+    // tempo tutti-contro-tutti a cui partecipano automaticamente tutti i
+    // giocatori con almeno 100 monete (non solo chi è di turno).
+    if (worldId === "abisso") {
+      this.beginTct(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -1686,6 +1738,201 @@ export class GameSession {
 
     io.emit("caroamico:ended", { playerId: target.id, won, coinsAwarded });
     this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+
+  // Avvia il round di TCT (mondo "abisso"): tutti i giocatori connessi con
+  // almeno 100 monete vengono iscritti automaticamente, pagano la quota
+  // (che forma il montepremi) e si pescano le domande. Se nessuno è
+  // qualificato, il tuffo nell'abisso salta e il turno prosegue normale.
+  private beginTct(player: InternalPlayer, io: IOServer) {
+    const participants = [...this.players.values()].filter(
+      (p) => p.connected && p.coins >= TCT_ENTRY_FEE
+    );
+
+    if (participants.length === 0) {
+      io.emit("tct:skipped", {
+        reason: "Nessun giocatore ha almeno 100 monete: il tuffo nell'abisso salta.",
+      });
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    for (const p of participants) p.coins -= TCT_ENTRY_FEE;
+    const potTotal = participants.length * TCT_ENTRY_FEE;
+
+    const questions = pickRandomTctQuestions(TCT_QUESTION_COUNT, this.playedTctQuestionIds);
+    for (const q of questions) this.playedTctQuestionIds.add(q.id);
+
+    const totalPoints = new Map<string, number>();
+    for (const p of participants) totalPoints.set(p.id, 0);
+
+    this.pendingTct = {
+      triggeredByPlayerId: player.id,
+      participantIds: participants.map((p) => p.id),
+      potTotal,
+      questions,
+      currentQuestionIndex: -1,
+      currentAnswers: new Map(),
+      questionStartedAt: 0,
+      timer: null,
+      totalPoints,
+    };
+
+    io.emit("tct:started", {
+      participantIds: this.pendingTct.participantIds,
+      potTotal,
+      entryFee: TCT_ENTRY_FEE,
+    });
+    this.broadcastState(io); // mostra subito a tutti le monete scalate
+
+    setTimeout(() => this.beginTctQuestion(io), TCT_INTRO_DELAY_MS);
+  }
+
+  // Apre la prossima domanda del round di TCT e fa partire il timer lato
+  // server (autorevole: il countdown mostrato al client è solo estetico).
+  private beginTctQuestion(io: IOServer) {
+    const tct = this.pendingTct;
+    if (!tct) return;
+
+    tct.currentQuestionIndex += 1;
+    tct.currentAnswers = new Map();
+    tct.questionStartedAt = Date.now();
+
+    const idx = tct.currentQuestionIndex;
+    const q = tct.questions[idx];
+
+    io.emit("tct:question", {
+      questionIndex: idx,
+      totalQuestions: tct.questions.length,
+      question: { question: q.question, options: q.options },
+      timeLimitSec: TCT_TIME_LIMIT_SEC,
+      participantIds: tct.participantIds,
+    });
+
+    tct.timer = setTimeout(() => {
+      this.resolveTctQuestion(io);
+    }, TCT_TIME_LIMIT_SEC * 1000);
+  }
+
+  // Un partecipante risponde alla domanda corrente di TCT. La velocità di
+  // risposta (in ms dall'apertura della domanda, calcolata lato server per
+  // evitare problemi di sincronizzazione degli orologi) determina i punti.
+  submitTctAnswer(playerId: string, answerIndex: number | null, io: IOServer) {
+    const tct = this.pendingTct;
+    if (!tct) return;
+    if (!tct.participantIds.includes(playerId)) return;
+    if (tct.currentQuestionIndex < 0) return;
+    if (tct.currentAnswers.has(playerId)) return; // ha già risposto a questa domanda
+
+    tct.currentAnswers.set(playerId, {
+      index: answerIndex ?? -1,
+      atMs: Date.now() - tct.questionStartedAt,
+    });
+
+    if (tct.currentAnswers.size >= tct.participantIds.length) {
+      // hanno risposto tutti: non serve aspettare il timer
+      if (tct.timer) clearTimeout(tct.timer);
+      tct.timer = null;
+      this.resolveTctQuestion(io);
+    }
+  }
+
+  // Chiude la domanda corrente (per timeout o perché hanno risposto tutti),
+  // assegna i punti (n punti al più veloce tra i corretti, n-1 al secondo,
+  // ecc., dove n è il numero di partecipanti) e passa alla prossima
+  // domanda, oppure chiude il round se era l'ultima.
+  private resolveTctQuestion(io: IOServer) {
+    const tct = this.pendingTct;
+    if (!tct) return;
+    if (tct.timer) {
+      clearTimeout(tct.timer);
+      tct.timer = null;
+    }
+
+    const idx = tct.currentQuestionIndex;
+    const q = tct.questions[idx];
+    const n = tct.participantIds.length;
+
+    const correctAnswers = tct.participantIds
+      .map((pid) => ({ pid, entry: tct.currentAnswers.get(pid) }))
+      .filter((e) => e.entry && e.entry.index === q.correctIndex)
+      .sort((a, b) => a.entry!.atMs - b.entry!.atMs);
+
+    const results: { playerId: string; correct: boolean; pointsAwarded: number }[] = [];
+
+    correctAnswers.forEach((e, i) => {
+      const points = n - i;
+      const prev = tct.totalPoints.get(e.pid) ?? 0;
+      tct.totalPoints.set(e.pid, prev + points);
+      results.push({ playerId: e.pid, correct: true, pointsAwarded: points });
+    });
+
+    for (const pid of tct.participantIds) {
+      if (!correctAnswers.some((e) => e.pid === pid)) {
+        results.push({ playerId: pid, correct: false, pointsAwarded: 0 });
+      }
+    }
+
+    io.emit("tct:questionResult", {
+      questionIndex: idx,
+      correctIndex: q.correctIndex,
+      correctAnswerText: q.options[q.correctIndex],
+      results,
+    });
+
+    const isLastQuestion = idx >= tct.questions.length - 1;
+
+    setTimeout(() => {
+      if (!this.pendingTct) return;
+      if (isLastQuestion) {
+        this.finishTct(io);
+      } else {
+        this.beginTctQuestion(io);
+      }
+    }, TCT_REVEAL_DELAY_MS);
+  }
+
+  // Chiude il round di TCT: calcola la classifica finale, assegna il
+  // montepremi (diviso equamente in caso di pareggio in cima) e fa
+  // riprendere il turno di chi aveva fatto scattare l'evento.
+  private finishTct(io: IOServer) {
+    const tct = this.pendingTct;
+    if (!tct) return;
+
+    const standings = tct.participantIds
+      .map((pid) => ({ playerId: pid, totalPoints: tct.totalPoints.get(pid) ?? 0 }))
+      .sort((a, b) => b.totalPoints - a.totalPoints);
+
+    const maxPoints = standings[0]?.totalPoints ?? 0;
+    const winnerIds = standings.filter((s) => s.totalPoints === maxPoints).map((s) => s.playerId);
+    const share = winnerIds.length > 0 ? Math.floor(tct.potTotal / winnerIds.length) : 0;
+
+    const finalStandings = standings.map((s) => ({
+      ...s,
+      coinsWon: winnerIds.includes(s.playerId) ? share : 0,
+    }));
+
+    for (const winnerId of winnerIds) {
+      const p = this.players.get(winnerId);
+      if (p) p.coins += share;
+    }
+
+    io.emit("tct:ended", {
+      standings: finalStandings,
+      potTotal: tct.potTotal,
+      winnerIds,
+    });
+
+    const trigger = this.players.get(tct.triggeredByPlayerId);
+    this.pendingTct = null;
+
+    if (trigger) {
+      trigger.pendingWorldId = null;
+      this.maybeAdvanceTurn(trigger, io);
+    }
     this.broadcastState(io);
   }
 

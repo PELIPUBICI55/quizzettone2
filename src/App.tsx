@@ -8,6 +8,10 @@ import type {
   PackOpenedPayload,
   QuizQuestionPayload,
   QuizResultPayload,
+  TctEndedPayload,
+  TctQuestionPayload,
+  TctQuestionResultPayload,
+  TctStartedPayload,
   Top5State,
   WheelSpinPayload,
 } from "../shared/types";
@@ -23,6 +27,7 @@ import { CaroAmicoSelfChoice } from "./components/CaroAmicoSelfChoice";
 import { CaroAmicoWheel } from "./components/CaroAmicoWheel";
 import { CaroAmicoPersonaReveal } from "./components/CaroAmicoPersonaReveal";
 import { CaroAmicoGame } from "./components/CaroAmicoGame";
+import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
 import { ShieldPromptScreen } from "./components/ShieldPromptScreen";
@@ -77,6 +82,12 @@ export default function App() {
     personaEmoji: string;
   } | null>(null);
   const [caroAmicoState, setCaroAmicoState] = useState<CaroAmicoState | null>(null);
+  const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
+  const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
+  const [tctQuestionResultInfo, setTctQuestionResultInfo] =
+    useState<TctQuestionResultPayload | null>(null);
+  const [tctEndedInfo, setTctEndedInfo] = useState<TctEndedPayload | null>(null);
+  const [tctHasAnswered, setTctHasAnswered] = useState(false);
   const [packOpened, setPackOpened] = useState<PackOpenedPayload | null>(null);
   const [surpriseInfo, setSurpriseInfo] = useState<{ playerId: string; text: string; effectLabel: string } | null>(
     null
@@ -106,6 +117,7 @@ export default function App() {
       setCaroAmicoSpinInfo(null);
       setCaroAmicoPersonaInfo(null);
       setCaroAmicoState(null);
+      setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
       setWelcomeInfo(null);
@@ -187,6 +199,30 @@ export default function App() {
       setCaroAmicoSpinInfo(null);
       setCaroAmicoPersonaInfo(null);
     };
+    const onTctStarted = (p: TctStartedPayload) => {
+      setWelcomeInfo(null);
+      setTctStartedInfo(p);
+      setTctQuestionInfo(null);
+      setTctQuestionResultInfo(null);
+      setTctEndedInfo(null);
+    };
+    const onTctQuestion = (p: TctQuestionPayload) => {
+      setTctStartedInfo(null);
+      setTctQuestionInfo(p);
+      setTctQuestionResultInfo(null);
+      setTctHasAnswered(false);
+    };
+    const onTctQuestionResult = (p: TctQuestionResultPayload) => {
+      setTctQuestionInfo(null);
+      setTctQuestionResultInfo(p);
+    };
+    const onTctEnded = (p: TctEndedPayload) => {
+      setTctStartedInfo(null);
+      setTctQuestionInfo(null);
+      setTctQuestionResultInfo(null);
+      setTctEndedInfo(p);
+    };
+    const onTctSkipped = (p: { reason: string }) => setError(p.reason);
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
       setSurpriseInfo(p);
@@ -219,6 +255,11 @@ export default function App() {
     socket.on("caroamico:personaDrawn", onCaroAmicoPersona);
     socket.on("caroamico:state", onCaroAmicoState);
     socket.on("caroamico:ended", onCaroAmicoEnded);
+    socket.on("tct:started", onTctStarted);
+    socket.on("tct:question", onTctQuestion);
+    socket.on("tct:questionResult", onTctQuestionResult);
+    socket.on("tct:ended", onTctEnded);
+    socket.on("tct:skipped", onTctSkipped);
     socket.on("shop:packOpened", onPack);
     socket.on("board:surpriseDrawn", onSurpriseDrawn);
     socket.on("board:chooseTarget", onChooseTarget);
@@ -244,6 +285,11 @@ export default function App() {
       socket.off("caroamico:personaDrawn", onCaroAmicoPersona);
       socket.off("caroamico:state", onCaroAmicoState);
       socket.off("caroamico:ended", onCaroAmicoEnded);
+      socket.off("tct:started", onTctStarted);
+      socket.off("tct:question", onTctQuestion);
+      socket.off("tct:questionResult", onTctQuestionResult);
+      socket.off("tct:ended", onTctEnded);
+      socket.off("tct:skipped", onTctSkipped);
       socket.off("shop:packOpened", onPack);
       socket.off("board:surpriseDrawn", onSurpriseDrawn);
       socket.off("board:chooseTarget", onChooseTarget);
@@ -278,6 +324,12 @@ export default function App() {
     const t = setTimeout(() => setError(null), 4000);
     return () => clearTimeout(t);
   }, [error]);
+
+  useEffect(() => {
+    if (!tctEndedInfo) return;
+    const t = setTimeout(() => setTctEndedInfo(null), 6000);
+    return () => clearTimeout(t);
+  }, [tctEndedInfo]);
 
   if (!state) {
     return (
@@ -374,6 +426,16 @@ export default function App() {
 
         {shieldPromptInfo ? (
           <ShieldPromptScreen message={shieldPromptInfo.message} onRespond={respondShield} />
+        ) : tctStartedInfo || tctQuestionInfo || tctQuestionResultInfo || tctEndedInfo ? (
+          <TctMinigame
+            state={state}
+            started={tctStartedInfo}
+            question={tctQuestionInfo}
+            questionResult={tctQuestionResultInfo}
+            ended={tctEndedInfo}
+            hasAnswered={tctHasAnswered}
+            onAnswered={() => setTctHasAnswered(true)}
+          />
         ) : welcomeInfo ? (
           <WelcomeScreen
             world={currentWorld}
