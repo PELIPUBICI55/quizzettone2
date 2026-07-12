@@ -9,4 +9,5 @@ export const TOP5_CATEGORIES: Top5CategoryDef[] = [
   { id: "scienze", name: "Scienze", emoji: "🔬" },
   { id: "serietv", name: "Serie TV", emoji: "📺" },
   { id: "film", name: "Film", emoji: "🎬" },
+  { id: "musica", name: "Musica", emoji: "🎵" },
 ];

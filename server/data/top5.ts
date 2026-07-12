@@ -220,6 +220,74 @@ export const TOP5_BANK: Top5Def[] = [
     source:
       "Academy of Motion Picture Arts and Sciences — albo d'oro degli Oscar; le posizioni 3-5 sono a pari merito con altri titoli Disney a 2 premi (es. Frozen, Coco)",
   },
+  {
+    id: "top5-musica-streaming",
+    title: "Canzoni più streammate di sempre su Spotify",
+    category: "musica",
+    answers: ["Blinding Lights – The Weeknd", "Shape of You – Ed Sheeran", "Sweater Weather – The Neighbourhood", "Starboy – The Weeknd", "As It Was – Harry Styles"],
+    source: "kworb.net (dati Spotify aggiornati in tempo reale), luglio 2026",
+  },
+  {
+    id: "top5-musica-ascoltatori",
+    title: "Artisti con più ascoltatori mensili su Spotify",
+    category: "musica",
+    answers: ["Bruno Mars", "Justin Bieber", "The Weeknd", "Rihanna", "Michael Jackson"],
+    source: "kworb.net — Spotify Top Artists by Monthly Listeners, luglio 2026 (la classifica cambia di continuo)",
+  },
+  {
+    id: "top5-sanremo-ultimi",
+    title: "Ultime 5 canzoni vincitrici di Sanremo",
+    category: "musica",
+    answers: [
+      "Per sempre sì – Sal Da Vinci (2026)",
+      "Balorda nostalgia – Olly (2025)",
+      "La noia – Angelina Mango (2024)",
+      "Due vite – Marco Mengoni (2023)",
+      "Brividi – Mahmood e Blanco (2022)",
+    ],
+    source: "Albo d'oro ufficiale del Festival di Sanremo (categoria Campioni), RAI",
+  },
+  {
+    id: "top5-eurovision-ultime",
+    title: "Ultime 5 nazioni vincitrici dell'Eurovision",
+    category: "musica",
+    answers: [
+      "Bulgaria (2026) – DARA, \"Bangaranga\"",
+      "Austria (2025) – JJ",
+      "Svizzera (2024) – Nemo",
+      "Svezia (2023) – Loreen",
+      "Ucraina (2022) – Kalush Orchestra",
+    ],
+    source: "Eurovision.tv / Wikipedia — albo d'oro dell'Eurovision Song Contest",
+  },
+  {
+    id: "top5-sigle-anime",
+    title: "5 sigle anime più ascoltate su Spotify",
+    category: "musica",
+    answers: [
+      "Gurenge – LiSA (Demon Slayer)",
+      "Peace Sign – Kenshi Yonezu (My Hero Academia)",
+      "KICK BACK – Kenshi Yonezu (Chainsaw Man)",
+      "Blue Bird – Ikimonogakari (Naruto Shippuden)",
+      "Unravel – TK from Ling tosite sigure (Tokyo Ghoul)",
+    ],
+    source:
+      "Aggregazione di dati Spotify riportati da Xeud.it e AnimeClick; non esiste una classifica ufficiale unica sempre aggiornata",
+  },
+  {
+    id: "top5-canzoni-disney",
+    title: "5 canzoni Disney con più ascolti su Spotify",
+    category: "musica",
+    answers: [
+      "We Don't Talk About Bruno – Encanto",
+      "Let It Go – Frozen",
+      "How Far I'll Go – Oceania",
+      "You're Welcome (Tranquilla!) – Oceania",
+      "Life Is a Highway – Cars",
+    ],
+    source:
+      "Dati Spotify riportati da varie testate (Sky TG24, Velvet Gossip, HipLatina); \"We Don't Talk About Bruno\" ha superato \"Let It Go\" dopo l'uscita di Encanto nel 2021",
+  },
 ];
 
 export function pickRandomTop5(): Top5Def {
@@ -227,8 +295,9 @@ export function pickRandomTop5(): Top5Def {
 }
 
 // Categorie effettivamente "attive", cioè con almeno una top5 pronta nel
-// mazzo. Per ora sono geografia, scienze, serie tv e film; le figurine di
-// animali (1-6) sono ancora in attesa di essere assegnate a una loro categoria.
+// mazzo. Per ora sono geografia, scienze, serie tv, film e musica; le
+// figurine di animali (1-6) sono ancora in attesa di essere assegnate a una
+// loro categoria.
 export function pickRandomCategory(): Top5CategoryDef {
   const activeCategories = TOP5_CATEGORIES.filter((c) =>
     TOP5_BANK.some((t) => t.category === c.id)
