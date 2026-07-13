@@ -12,6 +12,11 @@ interface Props {
 // è il giocatore di turno stesso (isMine) a cliccare le celle, cercando di
 // evitare quella "bomba". L'host entra in gioco solo alla fine (state.ended),
 // per decidere quante monete assegnare.
+//
+// Le celle e il titolo usano pannelli scuri e pieni con bordo dorato
+// (.ocho-title-panel / .ocho-grid-panel / .ocho-cell, in src/index.css)
+// invece di trasparenze chiare, perché lo sfondo dell'app è una galassia
+// animata molto satura e le trasparenze chiare ci si perdevano dentro.
 export function OchoGame({ state, isMine, isHost, playerName }: Props) {
   const selectCell = (index: number) => {
     if (!isMine || state.ended) return;
@@ -22,9 +27,11 @@ export function OchoGame({ state, isMine, isHost, playerName }: Props) {
 
   return (
     <div className="wheel-wrap">
-      <h1 className="display" style={{ fontSize: "1.6rem", textAlign: "center" }}>
-        💣 {state.categoryEmoji} {state.categoryName}
-      </h1>
+      <div className="ocho-title-panel">
+        <h1 className="display" style={{ fontSize: "1.6rem", textAlign: "center" }}>
+          💣 {state.categoryEmoji} {state.categoryName}
+        </h1>
+      </div>
       <p style={{ color: "var(--cream)", textAlign: "center", maxWidth: 480 }}>
         {state.prompt}
       </p>
@@ -39,59 +46,26 @@ export function OchoGame({ state, isMine, isHost, playerName }: Props) {
           )}
       </p>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: "0.6rem",
-          width: "100%",
-          maxWidth: 480,
-          margin: "0.8rem 0",
-        }}
-      >
-        {state.cells.map((cell, i) => {
-          const clickable = isMine && !state.ended && !cell.revealed;
-          let background = "rgba(255, 255, 255, 0.06)";
-          let borderColor = "rgba(255, 255, 255, 0.18)";
-          if (cell.revealed) {
-            if (cell.isBomb) {
-              background = "rgba(220, 38, 38, 0.28)";
-              borderColor = "rgba(248, 113, 113, 0.7)";
-            } else {
-              background = "rgba(34, 197, 94, 0.22)";
-              borderColor = "rgba(74, 222, 128, 0.7)";
-            }
-          }
-          return (
-            <button
-              key={i}
-              onClick={() => selectCell(i)}
-              disabled={!clickable}
-              style={{
-                background,
-                border: `1.5px solid ${borderColor}`,
-                borderRadius: "0.6rem",
-                padding: "0.7rem 0.5rem",
-                minHeight: "4.2rem",
-                color: "var(--cream)",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                cursor: clickable ? "pointer" : "default",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.25rem",
-                textAlign: "center",
-              }}
-            >
-              <span>{cell.text}</span>
-              {cell.revealed && (
-                <span style={{ fontSize: "1.3rem" }}>{cell.isBomb ? "💣" : "✅"}</span>
-              )}
-            </button>
-          );
-        })}
+      <div className="ocho-grid-panel">
+        <div className="ocho-grid">
+          {state.cells.map((cell, i) => {
+            const clickable = isMine && !state.ended && !cell.revealed;
+            const stateClass = cell.revealed ? (cell.isBomb ? "bomb" : "safe") : "";
+            return (
+              <button
+                key={i}
+                onClick={() => selectCell(i)}
+                disabled={!clickable}
+                className={`ocho-cell${clickable ? " clickable" : ""}${stateClass ? ` ${stateClass}` : ""}`}
+              >
+                <span>{cell.text}</span>
+                {cell.revealed && (
+                  <span style={{ fontSize: "1.3rem" }}>{cell.isBomb ? "💣" : "✅"}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {state.ended ? (
@@ -127,7 +101,7 @@ export function OchoGame({ state, isMine, isHost, playerName }: Props) {
           </p>
         )
       ) : (
-        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+        <p className="ocho-progress-text" style={{ fontSize: "0.8rem" }}>
           {state.cells.filter((c) => c.revealed).length} / {state.cells.length - 1} risposte sicure
           trovate
         </p>
