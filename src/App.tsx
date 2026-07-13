@@ -222,7 +222,14 @@ export default function App() {
       setTctQuestionResultInfo(null);
       setTctEndedInfo(p);
     };
-    const onTctSkipped = (p: { reason: string }) => setError(p.reason);
+    const onTctSkipped = (p: { reason: string }) => {
+      setError(p.reason);
+      // Il round è stato saltato lato server e il turno è già passato oltre:
+      // senza questo, chi era sulla schermata di benvenuto (con il tasto
+      // "Skippa gioco") ci restava bloccato all'infinito, dando l'impressione
+      // che non fosse successo nulla.
+      setWelcomeInfo(null);
+    };
     const onPack = (p: PackOpenedPayload) => setPackOpened(p);
     const onSurpriseDrawn = (p: { playerId: string; text: string; effectLabel: string }) => {
       setSurpriseInfo(p);
@@ -441,6 +448,7 @@ export default function App() {
             world={currentWorld}
             isMine={welcomeInfo.playerId === state.me.id}
             playerName={welcomePlayer?.name ?? "?"}
+            turnPlayerId={welcomeInfo.playerId}
             players={state.players}
           />
         ) : caroAmicoSelfChoiceInfo ? (

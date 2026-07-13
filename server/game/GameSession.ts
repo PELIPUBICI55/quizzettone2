@@ -1743,26 +1743,33 @@ export class GameSession {
 
   // Avvia il round di TCT (mondo "abisso"): tutti i giocatori connessi con
   // almeno 100 monete vengono iscritti automaticamente, pagano la quota
-  // (che forma il montepremi) e si pescano le domande. Se non ci sono almeno
-  // due giocatori qualificati (serve un vero "tutti contro tutti"), il tuffo
-  // nell'abisso salta e il turno prosegue normale.
+  // (che forma il montepremi) e si pescano le domande. La condizione per
+  // giocare NON è "esistono almeno due giocatori qualsiasi qualificati": è
+  // il giocatore di turno stesso che deve avere almeno 100 monete, E deve
+  // esisterne almeno un altro (connesso, con almeno 100 monete) che gli
+  // faccia da sfidante. Altrimenti il tuffo nell'abisso salta e il turno
+  // prosegue normale.
   private beginTct(player: InternalPlayer, io: IOServer) {
-    const participants = [...this.players.values()].filter(
-      (p) => p.connected && p.coins >= TCT_ENTRY_FEE
-    );
+    const turnPlayerQualifies = player.coins >= TCT_ENTRY_FEE;
+    const otherQualifyingCount = [...this.players.values()].filter(
+      (p) => p.id !== player.id && p.connected && p.coins >= TCT_ENTRY_FEE
+    ).length;
 
-    if (participants.length < 2) {
+    if (!turnPlayerQualifies || otherQualifyingCount < 1) {
       io.emit("tct:skipped", {
-        reason:
-          participants.length === 0
-            ? "Nessun giocatore ha almeno 100 monete: il tuffo nell'abisso salta."
-            : "Serve almeno un altro giocatore con 100 monete: il tuffo nell'abisso salta.",
+        reason: !turnPlayerQualifies
+          ? "Il giocatore di turno non ha almeno 100 monete: il tuffo nell'abisso salta."
+          : "Serve almeno un altro giocatore con 100 monete: il tuffo nell'abisso salta.",
       });
       player.pendingWorldId = null;
       this.maybeAdvanceTurn(player, io);
       this.broadcastState(io);
       return;
     }
+
+    const participants = [...this.players.values()].filter(
+      (p) => p.connected && p.coins >= TCT_ENTRY_FEE
+    );
 
     for (const p of participants) p.coins -= TCT_ENTRY_FEE;
     const potTotal = participants.length * TCT_ENTRY_FEE;

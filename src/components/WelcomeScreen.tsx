@@ -5,6 +5,7 @@ interface Props {
   world: WorldDef | undefined;
   isMine: boolean;
   playerName: string;
+  turnPlayerId: string | undefined;
   players: PlayerSummary[];
 }
 
@@ -13,10 +14,23 @@ interface Props {
 // tasto "Skippa gioco" prima ancora di tentare di avviare il minigioco.
 const TCT_ENTRY_FEE = 100;
 
-export function WelcomeScreen({ world, isMine, playerName, players }: Props) {
+export function WelcomeScreen({ world, isMine, playerName, turnPlayerId, players }: Props) {
   const isTct = world?.id === "abisso";
-  const qualifyingCount = players.filter((p) => p.connected && p.coins >= TCT_ENTRY_FEE).length;
-  const tctNotEnoughPlayers = isTct && qualifyingCount < 2;
+
+  // La condizione NON è "esistono almeno due giocatori qualsiasi con 100
+  // monete": è il giocatore di turno stesso che deve averne almeno 100, più
+  // almeno un altro giocatore connesso che gli faccia da sfidante. Deve
+  // restare allineata a beginTct() in server/game/GameSession.ts.
+  const turnPlayer = players.find((p) => p.id === turnPlayerId);
+  const turnPlayerQualifies = !!turnPlayer && turnPlayer.connected && turnPlayer.coins >= TCT_ENTRY_FEE;
+  const otherQualifyingCount = players.filter(
+    (p) => p.id !== turnPlayerId && p.connected && p.coins >= TCT_ENTRY_FEE
+  ).length;
+  const tctNotEnoughPlayers = isTct && (!turnPlayerQualifies || otherQualifyingCount < 1);
+
+  const skipGame = () => {
+    socket.emit("board:beginMinigame");
+  };
 
   return (
     <div className="wheel-wrap">
@@ -27,8 +41,9 @@ export function WelcomeScreen({ world, isMine, playerName, players }: Props) {
         <p className="subtle">{world?.tagline ?? ""}</p>
         {tctNotEnoughPlayers ? (
           <p>
-            Servono almeno due giocatori connessi con 100 monete per tuffarsi nell'abisso: al
-            momento non ci sono abbastanza sfidanti, quindi questa prova va saltata.
+            Servono almeno due giocatori connessi con 100 monete per tuffarsi nell'abisso (tra cui
+            il giocatore di turno): al momento non ci sono abbastanza sfidanti, quindi questa prova
+            va saltata.
           </p>
         ) : (
           <p>
@@ -40,7 +55,7 @@ export function WelcomeScreen({ world, isMine, playerName, players }: Props) {
 
       {isMine ? (
         tctNotEnoughPlayers ? (
-          <button className="btn-outline" onClick={() => socket.emit("board:beginMinigame")}>
+          <button className="btn-outline" onClick={skipGame}>
             Skippa gioco
           </button>
         ) : (
