@@ -5,6 +5,7 @@ import type {
   ChooseTargetPayload,
   GameStateSnapshot,
   MinigameType,
+  OchoStatePayload,
   PackOpenedPayload,
   QuizQuestionPayload,
   QuizResultPayload,
@@ -27,6 +28,9 @@ import { CaroAmicoSelfChoice } from "./components/CaroAmicoSelfChoice";
 import { CaroAmicoWheel } from "./components/CaroAmicoWheel";
 import { CaroAmicoPersonaReveal } from "./components/CaroAmicoPersonaReveal";
 import { CaroAmicoGame } from "./components/CaroAmicoGame";
+import { OchoWheel } from "./components/OchoWheel";
+import { OchoCategoryReveal } from "./components/OchoCategoryReveal";
+import { OchoGame } from "./components/OchoGame";
 import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -82,6 +86,16 @@ export default function App() {
     personaEmoji: string;
   } | null>(null);
   const [caroAmicoState, setCaroAmicoState] = useState<CaroAmicoState | null>(null);
+  const [ochoSpinInfo, setOchoSpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [ochoCategoryInfo, setOchoCategoryInfo] = useState<{
+    playerId: string;
+    categoryId: string;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
+  const [ochoState, setOchoState] = useState<OchoStatePayload | null>(null);
   const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
   const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
   const [tctQuestionResultInfo, setTctQuestionResultInfo] =
@@ -117,6 +131,9 @@ export default function App() {
       setCaroAmicoSpinInfo(null);
       setCaroAmicoPersonaInfo(null);
       setCaroAmicoState(null);
+      setOchoSpinInfo(null);
+      setOchoCategoryInfo(null);
+      setOchoState(null);
       setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
@@ -199,6 +216,32 @@ export default function App() {
       setCaroAmicoSpinInfo(null);
       setCaroAmicoPersonaInfo(null);
     };
+    const onOchoSpin = (p: { playerId: string; durationMs: number }) => {
+      setWelcomeInfo(null);
+      setOchoSpinInfo(p);
+      setOchoCategoryInfo(null);
+      setOchoState(null);
+    };
+    const onOchoCategory = (p: {
+      playerId: string;
+      categoryId: string;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
+      setOchoSpinInfo(null);
+      setOchoCategoryInfo(p);
+      setOchoState(null);
+    };
+    const onOchoState = (p: OchoStatePayload) => {
+      setOchoSpinInfo(null);
+      setOchoCategoryInfo(null);
+      setOchoState(p);
+    };
+    const onOchoEnded = () => {
+      setOchoState(null);
+      setOchoSpinInfo(null);
+      setOchoCategoryInfo(null);
+    };
     const onTctStarted = (p: TctStartedPayload) => {
       setWelcomeInfo(null);
       setTctStartedInfo(p);
@@ -262,6 +305,10 @@ export default function App() {
     socket.on("caroamico:personaDrawn", onCaroAmicoPersona);
     socket.on("caroamico:state", onCaroAmicoState);
     socket.on("caroamico:ended", onCaroAmicoEnded);
+    socket.on("ocho:spin", onOchoSpin);
+    socket.on("ocho:categoryDrawn", onOchoCategory);
+    socket.on("ocho:state", onOchoState);
+    socket.on("ocho:ended", onOchoEnded);
     socket.on("tct:started", onTctStarted);
     socket.on("tct:question", onTctQuestion);
     socket.on("tct:questionResult", onTctQuestionResult);
@@ -292,6 +339,10 @@ export default function App() {
       socket.off("caroamico:personaDrawn", onCaroAmicoPersona);
       socket.off("caroamico:state", onCaroAmicoState);
       socket.off("caroamico:ended", onCaroAmicoEnded);
+      socket.off("ocho:spin", onOchoSpin);
+      socket.off("ocho:categoryDrawn", onOchoCategory);
+      socket.off("ocho:state", onOchoState);
+      socket.off("ocho:ended", onOchoEnded);
       socket.off("tct:started", onTctStarted);
       socket.off("tct:question", onTctQuestion);
       socket.off("tct:questionResult", onTctQuestionResult);
@@ -323,6 +374,9 @@ export default function App() {
     setCaroAmicoSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setCaroAmicoPersonaInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setCaroAmicoState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setOchoSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setOchoCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setOchoState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -410,6 +464,9 @@ export default function App() {
     (p) => p.id === caroAmicoPersonaInfo?.playerId
   );
   const caroAmicoStatePlayer = state.players.find((p) => p.id === caroAmicoState?.playerId);
+  const ochoSpinPlayer = state.players.find((p) => p.id === ochoSpinInfo?.playerId);
+  const ochoCategoryPlayer = state.players.find((p) => p.id === ochoCategoryInfo?.playerId);
+  const ochoStatePlayer = state.players.find((p) => p.id === ochoState?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -475,6 +532,25 @@ export default function App() {
             state={caroAmicoState}
             isHost={state.me.isHost}
             playerName={caroAmicoStatePlayer?.name ?? "?"}
+          />
+        ) : ochoSpinInfo ? (
+          <OchoWheel
+            isMine={ochoSpinInfo.playerId === state.me.id}
+            playerName={ochoSpinPlayer?.name ?? "?"}
+          />
+        ) : ochoCategoryInfo ? (
+          <OchoCategoryReveal
+            categoryName={ochoCategoryInfo.categoryName}
+            categoryEmoji={ochoCategoryInfo.categoryEmoji}
+            isMine={ochoCategoryInfo.playerId === state.me.id}
+            playerName={ochoCategoryPlayer?.name ?? "?"}
+          />
+        ) : ochoState ? (
+          <OchoGame
+            state={ochoState}
+            isMine={ochoState.playerId === state.me.id}
+            isHost={state.me.isHost}
+            playerName={ochoStatePlayer?.name ?? "?"}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel

@@ -129,6 +129,27 @@ io.on("connection", (socket) => {
     session?.resolveCaroAmico(loc.playerId, won, io);
   });
 
+  socket.on("ocho:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginOchoGame(loc.playerId, io);
+  });
+
+  socket.on("ocho:select", ({ index }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.selectOchoCell(loc.playerId, index, io);
+  });
+
+  socket.on("ocho:resolve", ({ coinsAwarded }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveOcho(loc.playerId, coinsAwarded, io);
+  });
+
   socket.on("tct:answer", ({ answerIndex }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

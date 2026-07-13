@@ -298,6 +298,40 @@ export interface TctSkippedPayload {
   reason: string; // es. "nessun giocatore ha abbastanza monete"
 }
 
+// --- Mondo "deserto" (OCHO ALLA BOMBA) --------------------------------------
+// Come la Top5, si estrae prima una categoria dalla ruota verticale, poi un
+// "gioco" a caso in quella categoria (mai ripetuto nella stessa partita).
+// A differenza di Top5/CaroAmico, però, qui è il giocatore stesso (non
+// l'host) a interagire: ha davanti 9 risposte e le seleziona una a una
+// cercando di evitare quella "bomba". L'host entra in gioco solo alla fine,
+// per decidere quante monete assegnare (0/50/100).
+
+export interface OchoCategoryDef {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
+export interface OchoCellPublic {
+  text: string; // il testo della risposta è sempre visibile
+  revealed: boolean;
+  isBomb: boolean; // significativo solo se revealed è true
+}
+
+export interface OchoStatePayload {
+  playerId: string; // chi sta giocando
+  categoryName: string;
+  categoryEmoji: string;
+  prompt: string;
+  cells: OchoCellPublic[]; // esattamente 9
+  ended: boolean; // true quando non si può più selezionare (bomba trovata, o restava solo lei)
+}
+
+export interface OchoEndedPayload {
+  playerId: string;
+  coinsAwarded: number; // 0, 50 o 100
+}
+
 export interface PackOpenedPayload {
   packId: string;
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
@@ -387,6 +421,9 @@ export interface ClientToServerEvents {
   "caroamico:reveal": () => void;
   "caroamico:resolve": (payload: { won: boolean }) => void;
   "tct:answer": (payload: { answerIndex: number | null }) => void;
+  "ocho:beginGame": () => void;
+  "ocho:select": (payload: { index: number }) => void;
+  "ocho:resolve": (payload: { coinsAwarded: number }) => void;
 }
 
 // Eventi server -> client
@@ -422,6 +459,12 @@ export interface ServerToClientEvents {
   "tct:questionResult": (payload: TctQuestionResultPayload) => void;
   "tct:ended": (payload: TctEndedPayload) => void;
   "tct:skipped": (payload: TctSkippedPayload) => void;
+  "ocho:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "ocho:categoryDrawn": (
+    payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
+  ) => void;
+  "ocho:state": (payload: OchoStatePayload) => void;
+  "ocho:ended": (payload: OchoEndedPayload) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
   "error:message": (payload: { message: string }) => void;
   "party:kicked": () => void;

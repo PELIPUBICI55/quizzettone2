@@ -30,6 +30,7 @@ import { pickRandomCategory, pickRandomTop5InCategory } from "../data/top5.js";
 import { CARO_AMICO_PERSONE } from "../../shared/caroAmicoPersone.js";
 import { pickRandomPersonaExcluding, pickRandomDomanda } from "../data/caroAmico.js";
 import { pickRandomTctQuestions, TctQuestionInternal } from "../data/tct.js";
+import { pickRandomOchoCategory, pickRandomOchoGameInCategory, shuffleOchoGame } from "../data/ocho.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -68,6 +69,29 @@ interface PendingTct {
   questionStartedAt: number; // Date.now() di quando è partita la domanda corrente
   timer: ReturnType<typeof setTimeout> | null;
   totalPoints: Map<string, number>; // punteggio cumulato per giocatore
+}
+
+// Stato di un round di OCHO ALLA BOMBA (mondo "deserto") in corso per un
+// giocatore: a differenza di Top5/CaroAmico, qui è il giocatore stesso (non
+// l'host) a selezionare le celle, quindi non serve nessuna versione "solo
+// host" nascosta: la bomba resta segreta a tutti finché non viene rivelata
+// da un clic (o dall'auto-reveal quando resta scoperta solo lei).
+interface PendingOchoCell {
+  text: string;
+  revealed: boolean;
+  isBomb: boolean; // significativo solo se revealed è true
+}
+
+interface PendingOcho {
+  gameId: string; // per capire, dopo l'animazione, se è ancora lo stesso gioco pescato
+  categoryId: string;
+  categoryName: string;
+  categoryEmoji: string;
+  prompt: string;
+  cells: PendingOchoCell[]; // esattamente 9, ordine già rimescolato
+  bombIndex: number; // indice della bomba DENTRO cells (post-rimescolamento)
+  safeRevealedCount: number;
+  ended: boolean; // true quando non si può più selezionare (bomba trovata, o restava solo lei)
 }
 
 interface InternalPlayer {
@@ -110,6 +134,8 @@ interface InternalPlayer {
     revealed: boolean;
   } | null;
   awaitingCaroAmicoStart: boolean; // sulla schermata di conferma persona pescata, in attesa che clicchi "Ok iniziamo"
+  pendingOcho: PendingOcho | null;
+  awaitingOchoStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
@@ -121,6 +147,7 @@ const TCT_QUESTION_COUNT = 4;
 const TCT_TIME_LIMIT_SEC = 10;
 const TCT_REVEAL_DELAY_MS = 3500;
 const TCT_INTRO_DELAY_MS = 2200;
+const OCHO_VALID_REWARDS = [0, 50, 100];
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -156,6 +183,9 @@ export class GameSession {
   // ripetere la stessa domanda finché la partita è in corso.
   private pendingTct: PendingTct | null = null;
   private playedTctQuestionIds = new Set<string>();
+  // Id dei giochi di OCHO ALLA BOMBA già usciti in questa partita, stesso
+  // motivo di playedTop5Ids/playedTctQuestionIds.
+  private playedOchoIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -207,6 +237,8 @@ export class GameSession {
       awaitingCaroAmicoSelfChoice: false,
       pendingCaroAmico: null,
       awaitingCaroAmicoStart: false,
+      pendingOcho: null,
+      awaitingOchoStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -314,6 +346,23 @@ export class GameSession {
         answer: revealed ? correctAnswer : null,
         fullAnswer: player.isHost ? correctAnswer : undefined,
       });
+    }
+
+    // Stessa cosa per OCHO ALLA BOMBA (mondo "deserto"): schermata di
+    // conferma categoria, o griglia di gioco (uguale per tutti, host
+    // compreso: non c'è nulla da nascondere selettivamente, la bomba resta
+    // segreta finché non viene rivelata da un clic).
+    const ochoPlayer = [...this.players.values()].find((p) => p.pendingOcho);
+    if (ochoPlayer?.awaitingOchoStart) {
+      const { categoryId, categoryName, categoryEmoji } = ochoPlayer.pendingOcho!;
+      io.to(player.socketId).emit("ocho:categoryDrawn", {
+        playerId: ochoPlayer.id,
+        categoryId,
+        categoryName,
+        categoryEmoji,
+      });
+    } else if (ochoPlayer?.pendingOcho) {
+      io.to(player.socketId).emit("ocho:state", this.buildOchoStatePayload(ochoPlayer));
     }
 
     // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
@@ -1437,6 +1486,15 @@ export class GameSession {
       return;
     }
 
+    // Anche il mondo "deserto" (OCHO ALLA BOMBA) ha una meccanica dedicata:
+    // si estrae prima una categoria dalla ruota (come in Top5), poi un
+    // gioco a caso al suo interno; stavolta però è il giocatore stesso a
+    // selezionare le risposte, evitando la bomba.
+    if (worldId === "deserto") {
+      this.beginOcho(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -1737,6 +1795,157 @@ export class GameSession {
     target.pendingWorldId = null;
 
     io.emit("caroamico:ended", { playerId: target.id, won, coinsAwarded });
+    this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+  // Avvia il minigioco OCHO ALLA BOMBA (mondo "deserto"): pesca una
+  // categoria e un gioco al suo interno (escludendo quelli già giocati in
+  // questa partita), rimescola l'ordine delle 9 risposte (altrimenti la
+  // bomba sarebbe sempre nella stessa posizione del file sorgente) e mostra
+  // l'animazione della ruota verticale, poi rivela la categoria a tutti.
+  private beginOcho(player: InternalPlayer, io: IOServer) {
+    const category = pickRandomOchoCategory(this.playedOchoIds);
+    const rawGame = pickRandomOchoGameInCategory(category.id, this.playedOchoIds);
+    this.playedOchoIds.add(rawGame.id);
+
+    const { answers, bombIndex } = shuffleOchoGame(rawGame);
+    player.pendingOcho = {
+      gameId: rawGame.id,
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryEmoji: category.emoji,
+      prompt: rawGame.prompt,
+      cells: answers.map((text) => ({ text, revealed: false, isBomb: false })),
+      bombIndex,
+      safeRevealedCount: 0,
+      ended: false,
+    };
+    const durationMs = 2600;
+
+    io.emit("ocho:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingOcho || player.pendingOcho.gameId !== rawGame.id) return;
+      player.awaitingOchoStart = true;
+      io.emit("ocho:categoryDrawn", {
+        playerId: player.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Conferma la categoria e apre davvero la griglia di gioco.
+  beginOchoGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingOchoStart) return;
+    player.awaitingOchoStart = false;
+    this.broadcastOchoState(player, io);
+  }
+
+  // Costruisce il payload pubblico dello stato di OCHO: a differenza di
+  // Top5/CaroAmico non serve una versione "solo host", perché non c'è nulla
+  // da nascondere selettivamente (la bomba è segreta per tutti allo stesso
+  // modo finché non viene rivelata).
+  private buildOchoStatePayload(player: InternalPlayer) {
+    const ocho = player.pendingOcho!;
+    return {
+      playerId: player.id,
+      categoryName: ocho.categoryName,
+      categoryEmoji: ocho.categoryEmoji,
+      prompt: ocho.prompt,
+      cells: ocho.cells.map((c) => ({
+        text: c.text,
+        revealed: c.revealed,
+        isBomb: c.revealed ? c.isBomb : false,
+      })),
+      ended: ocho.ended,
+    };
+  }
+
+  private broadcastOchoState(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingOcho) return;
+    io.emit("ocho:state", this.buildOchoStatePayload(player));
+  }
+
+  // Il giocatore stesso (non l'host) seleziona una cella, cercando di
+  // evitare la bomba. Il gioco si blocca (ended = true) se la trova, oppure
+  // se resta scoperta solo lei: in quel caso la releviamo comunque, per
+  // chiarezza, invece di lasciarla nascosta senza motivo.
+  selectOchoCell(playerId: string, index: number, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingOcho) return;
+    const ocho = player.pendingOcho;
+    if (ocho.ended) return;
+    if (index < 0 || index >= ocho.cells.length) return;
+
+    const cell = ocho.cells[index];
+    if (cell.revealed) return;
+
+    cell.revealed = true;
+
+    if (index === ocho.bombIndex) {
+      cell.isBomb = true;
+      ocho.ended = true;
+    } else {
+      cell.isBomb = false;
+      ocho.safeRevealedCount += 1;
+      if (ocho.safeRevealedCount >= ocho.cells.length - 1) {
+        // restava solo la bomba: niente altro da scegliere, la sveliamo e ci fermiamo qui
+        const bombCell = ocho.cells[ocho.bombIndex];
+        bombCell.revealed = true;
+        bombCell.isBomb = true;
+        ocho.ended = true;
+      }
+    }
+
+    this.broadcastOchoState(player, io);
+  }
+
+  // Solo l'host, e solo a selezione conclusa, decreta quante monete
+  // assegnare (0, 50 o 100): stessi moltiplicatori di stato degli altri
+  // minigiochi (vincita doppia/tripla/dimezzata).
+  resolveOcho(hostId: string, coinsAwarded: number, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingOcho);
+    if (!target?.pendingOcho) return;
+    if (!target.pendingOcho.ended) return;
+    if (!OCHO_VALID_REWARDS.includes(coinsAwarded)) return;
+
+    target.pendingOcho = null;
+
+    // figurine con effetto passivo: si applicano da sole alla fine di ogni gioco
+    this.applyPassiveCardEffects(target);
+
+    let finalCoins = coinsAwarded;
+
+    const doubleIdx = target.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      finalCoins *= 2;
+      target.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = target.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      finalCoins *= 3;
+      target.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = target.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      finalCoins = Math.floor(finalCoins / 2);
+      target.statuses.splice(halveIdx, 1);
+    }
+
+    target.coins += finalCoins;
+    target.pendingWorldId = null;
+
+    io.emit("ocho:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
     this.broadcastState(io);
   }
@@ -2044,8 +2253,7 @@ export class GameSession {
     if (doubleIdx !== -1) {
       coinsAwarded *= 2;
       player.statuses.splice(doubleIdx, 1);
-    }
-    const tripleIdx = player.statuses.findIndex((s) => s.type === "tripleWin");
+    }    const tripleIdx = player.statuses.findIndex((s) => s.type === "tripleWin");
     if (tripleIdx !== -1) {
       coinsAwarded *= 3;
       player.statuses.splice(tripleIdx, 1);
@@ -2258,7 +2466,6 @@ export class GameSession {
       this.broadcastState(io);
       return;
     }
-
     if (cardDef.effect.type === "steal200Coins") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
