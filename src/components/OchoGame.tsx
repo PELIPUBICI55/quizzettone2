@@ -13,10 +13,11 @@ interface Props {
 // evitare quella "bomba". L'host entra in gioco solo alla fine (state.ended),
 // per decidere quante monete assegnare.
 //
-// Le celle e il titolo usano pannelli scuri e pieni con bordo dorato
-// (.ocho-title-panel / .ocho-grid-panel / .ocho-cell, in src/index.css)
-// invece di trasparenze chiare, perché lo sfondo dell'app è una galassia
-// animata molto satura e le trasparenze chiare ci si perdevano dentro.
+// Titolo, domanda e celle usano pannelli scuri e pieni con bordo dorato
+// (.ocho-title-panel / .ocho-prompt-panel / .ocho-grid-panel / .ocho-cell,
+// in src/index.css) invece di trasparenze chiare, perché lo sfondo dell'app
+// è una galassia animata molto satura e le trasparenze chiare ci si
+// perdevano dentro.
 export function OchoGame({ state, isMine, isHost, playerName }: Props) {
   const selectCell = (index: number) => {
     if (!isMine || state.ended) return;
@@ -32,9 +33,11 @@ export function OchoGame({ state, isMine, isHost, playerName }: Props) {
           💣 {state.categoryEmoji} {state.categoryName}
         </h1>
       </div>
-      <p style={{ color: "var(--cream)", textAlign: "center", maxWidth: 480 }}>
-        {state.prompt}
-      </p>
+
+      <div className="ocho-prompt-panel">
+        <p>{state.prompt}</p>
+      </div>
+
       <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
         {isMine
           ? "Seleziona le risposte una alla volta: evita la scossa!"
