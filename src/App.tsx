@@ -3,6 +3,10 @@ import type {
   CaroAmicoPersonaDef,
   CaroAmicoState,
   ChooseTargetPayload,
+  DuckAnswerResultPayload,
+  DuckEndedPayload,
+  DuckGridStatePayload,
+  DuckQuestionPayload,
   GameStateSnapshot,
   MinigameType,
   OchoStatePayload,
@@ -31,6 +35,10 @@ import { CaroAmicoGame } from "./components/CaroAmicoGame";
 import { OchoWheel } from "./components/OchoWheel";
 import { OchoCategoryReveal } from "./components/OchoCategoryReveal";
 import { OchoGame } from "./components/OchoGame";
+import { DuckWheel } from "./components/DuckWheel";
+import { DuckCategoryReveal } from "./components/DuckCategoryReveal";
+import { DuckQuiz } from "./components/DuckQuiz";
+import { DuckGrid } from "./components/DuckGrid";
 import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -96,6 +104,19 @@ export default function App() {
     categoryEmoji: string;
   } | null>(null);
   const [ochoState, setOchoState] = useState<OchoStatePayload | null>(null);
+  const [duckSpinInfo, setDuckSpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [duckCategoryInfo, setDuckCategoryInfo] = useState<{
+    playerId: string;
+    categoryId: string;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
+  const [duckQuestion, setDuckQuestion] = useState<DuckQuestionPayload | null>(null);
+  const [duckAnswerResult, setDuckAnswerResult] = useState<DuckAnswerResultPayload | null>(null);
+  const [duckGridState, setDuckGridState] = useState<DuckGridStatePayload | null>(null);
+  const [duckEnded, setDuckEnded] = useState<DuckEndedPayload | null>(null);
   const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
   const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
   const [tctQuestionResultInfo, setTctQuestionResultInfo] =
@@ -134,6 +155,12 @@ export default function App() {
       setOchoSpinInfo(null);
       setOchoCategoryInfo(null);
       setOchoState(null);
+      setDuckSpinInfo(null);
+      setDuckCategoryInfo(null);
+      setDuckQuestion(null);
+      setDuckAnswerResult(null);
+      setDuckGridState(null);
+      setDuckEnded(null);
       setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
@@ -242,6 +269,48 @@ export default function App() {
       setOchoSpinInfo(null);
       setOchoCategoryInfo(null);
     };
+    const onDuckSpin = (p: { playerId: string; durationMs: number }) => {
+      setWelcomeInfo(null);
+      setDuckSpinInfo(p);
+      setDuckCategoryInfo(null);
+      setDuckQuestion(null);
+      setDuckAnswerResult(null);
+      setDuckGridState(null);
+      setDuckEnded(null);
+    };
+    const onDuckCategory = (p: {
+      playerId: string;
+      categoryId: string;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
+      setDuckSpinInfo(null);
+      setDuckCategoryInfo(p);
+      setDuckQuestion(null);
+      setDuckAnswerResult(null);
+      setDuckGridState(null);
+      setDuckEnded(null);
+    };
+    const onDuckQuestion = (p: DuckQuestionPayload) => {
+      setDuckCategoryInfo(null);
+      setDuckQuestion(p);
+      setDuckAnswerResult(null);
+      setDuckGridState(null);
+    };
+    const onDuckAnswerResult = (p: DuckAnswerResultPayload) => setDuckAnswerResult(p);
+    const onDuckGridState = (p: DuckGridStatePayload) => {
+      setDuckQuestion(null);
+      setDuckAnswerResult(null);
+      setDuckGridState(p);
+    };
+    const onDuckEnded = (p: DuckEndedPayload) => {
+      setDuckEnded(p);
+      setDuckGridState(null);
+      setDuckSpinInfo(null);
+      setDuckCategoryInfo(null);
+      setDuckQuestion(null);
+      setDuckAnswerResult(null);
+    };
     const onTctStarted = (p: TctStartedPayload) => {
       setWelcomeInfo(null);
       setTctStartedInfo(p);
@@ -309,6 +378,12 @@ export default function App() {
     socket.on("ocho:categoryDrawn", onOchoCategory);
     socket.on("ocho:state", onOchoState);
     socket.on("ocho:ended", onOchoEnded);
+    socket.on("duck:spin", onDuckSpin);
+    socket.on("duck:categoryDrawn", onDuckCategory);
+    socket.on("duck:question", onDuckQuestion);
+    socket.on("duck:answerResult", onDuckAnswerResult);
+    socket.on("duck:gridState", onDuckGridState);
+    socket.on("duck:ended", onDuckEnded);
     socket.on("tct:started", onTctStarted);
     socket.on("tct:question", onTctQuestion);
     socket.on("tct:questionResult", onTctQuestionResult);
@@ -343,6 +418,12 @@ export default function App() {
       socket.off("ocho:categoryDrawn", onOchoCategory);
       socket.off("ocho:state", onOchoState);
       socket.off("ocho:ended", onOchoEnded);
+      socket.off("duck:spin", onDuckSpin);
+      socket.off("duck:categoryDrawn", onDuckCategory);
+      socket.off("duck:question", onDuckQuestion);
+      socket.off("duck:answerResult", onDuckAnswerResult);
+      socket.off("duck:gridState", onDuckGridState);
+      socket.off("duck:ended", onDuckEnded);
       socket.off("tct:started", onTctStarted);
       socket.off("tct:question", onTctQuestion);
       socket.off("tct:questionResult", onTctQuestionResult);
@@ -377,6 +458,10 @@ export default function App() {
     setOchoSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setOchoCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setOchoState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setDuckSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setDuckCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setDuckQuestion((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setDuckGridState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -467,6 +552,10 @@ export default function App() {
   const ochoSpinPlayer = state.players.find((p) => p.id === ochoSpinInfo?.playerId);
   const ochoCategoryPlayer = state.players.find((p) => p.id === ochoCategoryInfo?.playerId);
   const ochoStatePlayer = state.players.find((p) => p.id === ochoState?.playerId);
+  const duckSpinPlayer = state.players.find((p) => p.id === duckSpinInfo?.playerId);
+  const duckCategoryPlayer = state.players.find((p) => p.id === duckCategoryInfo?.playerId);
+  const duckQuestionPlayer = state.players.find((p) => p.id === duckQuestion?.playerId);
+  const duckGridPlayer = state.players.find((p) => p.id === duckGridState?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -551,6 +640,32 @@ export default function App() {
             isMine={ochoState.playerId === state.me.id}
             isHost={state.me.isHost}
             playerName={ochoStatePlayer?.name ?? "?"}
+          />
+        ) : duckSpinInfo ? (
+          <DuckWheel
+            isMine={duckSpinInfo.playerId === state.me.id}
+            playerName={duckSpinPlayer?.name ?? "?"}
+          />
+        ) : duckCategoryInfo ? (
+          <DuckCategoryReveal
+            categoryName={duckCategoryInfo.categoryName}
+            categoryEmoji={duckCategoryInfo.categoryEmoji}
+            isMine={duckCategoryInfo.playerId === state.me.id}
+            playerName={duckCategoryPlayer?.name ?? "?"}
+          />
+        ) : duckQuestion ? (
+          <DuckQuiz
+            payload={duckQuestion}
+            result={duckAnswerResult}
+            isMine={duckQuestion.playerId === state.me.id}
+            playerName={duckQuestionPlayer?.name ?? "?"}
+          />
+        ) : duckGridState ? (
+          <DuckGrid
+            state={duckGridState}
+            ended={duckEnded}
+            isMine={duckGridState.playerId === state.me.id}
+            playerName={duckGridPlayer?.name ?? "?"}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel

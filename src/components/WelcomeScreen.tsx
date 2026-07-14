@@ -40,6 +40,14 @@ function worldDescription(worldId: string | undefined): string {
         "seleziona le risposte una alla volta cercando di evitarla: se la trova, o resta solo " +
         "lei da scegliere, il gioco si ferma e l'host assegna 0, 50 o 100 monete."
       );
+    case "ghiacciaia":
+      return (
+        "Qui si gioca a Acchiappa la papera: la ruota estrae una categoria, poi il giocatore di " +
+        "turno risponde da solo, senza alcun aiuto dall'host, a un quiz di massimo 4 domande a " +
+        "risposta doppia. Deve azzeccarne 3 su 4 per accedere alla griglia dei 9 premi nascosti " +
+        "(500-100-100-50-50-50-50-40-40): sceglie una casella, si svelano subito tutti i premi, " +
+        "ma solo quello scelto viene assegnato in monete, in automatico."
+      );
     default:
       return (
         "Una ruota deciderà la prova da affrontare qui: rispondi correttamente entro il tempo " +

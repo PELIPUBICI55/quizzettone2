@@ -150,6 +150,27 @@ io.on("connection", (socket) => {
     session?.resolveOcho(loc.playerId, coinsAwarded, io);
   });
 
+  socket.on("duck:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginDuckGame(loc.playerId, io);
+  });
+
+  socket.on("duck:answer", ({ questionIndex, answerIndex }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.answerDuck(loc.playerId, questionIndex, answerIndex, io);
+  });
+
+  socket.on("duck:selectCell", ({ index }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.selectDuckCell(loc.playerId, index, io);
+  });
+
   socket.on("tct:answer", ({ answerIndex }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

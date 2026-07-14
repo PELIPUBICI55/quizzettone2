@@ -332,6 +332,70 @@ export interface OchoEndedPayload {
   coinsAwarded: number; // 0, 50 o 100
 }
 
+// --- Mondo "ghiacciaia" (ACCHIAPPA LA PAPERA) -------------------------------
+// Come la Top5/Ocho, si estrae prima una categoria dalla ruota verticale
+// (mai ripetuta nella stessa partita). A differenza di tutti gli altri
+// minigiochi, qui NON è mai coinvolto l'host: il giocatore di turno
+// risponde da solo a un quiz di massimo 4 domande (2 opzioni ciascuna,
+// ordine rimescolato a ogni pesca) e deve azzeccarne 3 su 4 per accedere
+// alla griglia premi; il quiz si interrompe subito appena la terza risposta
+// giusta o il secondo errore rendono l'esito matematicamente deciso. Se
+// qualificato, sceglie UNA delle 9 caselle della griglia: si rivelano
+// SUBITO tutti i 9 premi nascosti, ma solo quello della cella scelta viene
+// assegnato in monete. Tutto l'esito (successo o fallimento) è calcolato e
+// applicato in automatico dal server, senza alcuna conferma dell'host.
+
+export interface DuckCategoryDef {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
+export interface DuckQuestionPublic {
+  question: string;
+  options: string[]; // esattamente 2, correctIndex non incluso
+}
+
+export interface DuckQuestionPayload {
+  playerId: string;
+  categoryName: string;
+  categoryEmoji: string;
+  questionIndex: number; // 0-based, quale domanda è (tra le 4 disponibili)
+  totalQuestions: number; // sempre 4
+  question: DuckQuestionPublic;
+  correctSoFar: number;
+  wrongSoFar: number;
+}
+
+export interface DuckAnswerResultPayload {
+  playerId: string;
+  questionIndex: number;
+  correct: boolean;
+  correctIndex: number;
+  correctSoFar: number;
+  wrongSoFar: number;
+  qualified: boolean; // true se ha appena raggiunto 3 risposte corrette: accede alla griglia premi
+  failed: boolean; // true se ha appena raggiunto 2 errori prima di qualificarsi: prova persa, niente griglia
+}
+
+export interface DuckCellPublic {
+  revealed: boolean;
+  prize: number | null; // valorizzato solo quando revealed è true
+  chosen: boolean; // true SOLO per la cella scelta dal giocatore (il premio davvero assegnato)
+}
+
+export interface DuckGridStatePayload {
+  playerId: string;
+  categoryName: string;
+  categoryEmoji: string;
+  cells: DuckCellPublic[]; // esattamente 9
+}
+
+export interface DuckEndedPayload {
+  playerId: string;
+  coinsAwarded: number; // 0 se il quiz è fallito prima della griglia, altrimenti il premio scelto
+}
+
 export interface PackOpenedPayload {
   packId: string;
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
@@ -424,6 +488,9 @@ export interface ClientToServerEvents {
   "ocho:beginGame": () => void;
   "ocho:select": (payload: { index: number }) => void;
   "ocho:resolve": (payload: { coinsAwarded: number }) => void;
+  "duck:beginGame": () => void;
+  "duck:answer": (payload: { questionIndex: number; answerIndex: number | null }) => void;
+  "duck:selectCell": (payload: { index: number }) => void;
 }
 
 // Eventi server -> client
@@ -465,6 +532,14 @@ export interface ServerToClientEvents {
   ) => void;
   "ocho:state": (payload: OchoStatePayload) => void;
   "ocho:ended": (payload: OchoEndedPayload) => void;
+  "duck:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "duck:categoryDrawn": (
+    payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
+  ) => void;
+  "duck:question": (payload: DuckQuestionPayload) => void;
+  "duck:answerResult": (payload: DuckAnswerResultPayload) => void;
+  "duck:gridState": (payload: DuckGridStatePayload) => void;
+  "duck:ended": (payload: DuckEndedPayload) => void;
   "shop:packOpened": (payload: PackOpenedPayload) => void;
   "error:message": (payload: { message: string }) => void;
   "party:kicked": () => void;

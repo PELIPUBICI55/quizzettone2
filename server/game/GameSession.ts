@@ -31,6 +31,13 @@ import { CARO_AMICO_PERSONE } from "../../shared/caroAmicoPersone.js";
 import { pickRandomPersonaExcluding, pickRandomDomanda } from "../data/caroAmico.js";
 import { pickRandomTctQuestions, TctQuestionInternal } from "../data/tct.js";
 import { pickRandomOchoCategory, pickRandomOchoGameInCategory, shuffleOchoGame } from "../data/ocho.js";
+import {
+  pickRandomDuckCategory,
+  getDuckQuestions,
+  shuffleDuckQuestions,
+  shuffleDuckPrizes,
+  DuckQuestionInternal,
+} from "../data/duck.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -94,6 +101,30 @@ interface PendingOcho {
   ended: boolean; // true quando non si può più selezionare (bomba trovata, o restava solo lei)
 }
 
+// Stato di un round di ACCHIAPPA LA PAPERA (mondo "ghiacciaia") in corso per
+// un giocatore. A differenza di TUTTI gli altri minigiochi dedicati, qui
+// l'host non interviene mai: sia l'esito del quiz sia l'assegnazione delle
+// monete della griglia premi sono calcolati e applicati in automatico dal
+// server (vedi answerDuck/selectDuckCell più sotto).
+interface PendingDuckCell {
+  prize: number;
+  revealed: boolean;
+  chosen: boolean;
+}
+
+interface PendingDuck {
+  categoryId: string;
+  categoryName: string;
+  categoryEmoji: string;
+  questions: DuckQuestionInternal[]; // esattamente 4, già rimescolate (opzioni comprese)
+  questionIndex: number; // -1 prima che parta la prima domanda
+  correctCount: number;
+  wrongCount: number;
+  awaitingAnswer: boolean; // true finché non risponde alla domanda corrente
+  grid: PendingDuckCell[] | null; // valorizzata solo dopo essersi qualificato (3 corrette su 4)
+  ended: boolean; // true a griglia rivelata (scelta fatta), oppure a quiz fallito
+}
+
 interface InternalPlayer {
   id: string;
   socketId: string;
@@ -136,6 +167,8 @@ interface InternalPlayer {
   awaitingCaroAmicoStart: boolean; // sulla schermata di conferma persona pescata, in attesa che clicchi "Ok iniziamo"
   pendingOcho: PendingOcho | null;
   awaitingOchoStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
+  pendingDuck: PendingDuck | null;
+  awaitingDuckStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
@@ -186,6 +219,9 @@ export class GameSession {
   // Id dei giochi di OCHO ALLA BOMBA già usciti in questa partita, stesso
   // motivo di playedTop5Ids/playedTctQuestionIds.
   private playedOchoIds = new Set<string>();
+  // Id delle categorie di ACCHIAPPA LA PAPERA già uscite in questa partita,
+  // stesso motivo di playedOchoIds.
+  private playedDuckCategoryIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -239,6 +275,8 @@ export class GameSession {
       awaitingCaroAmicoStart: false,
       pendingOcho: null,
       awaitingOchoStart: false,
+      pendingDuck: null,
+      awaitingDuckStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -363,6 +401,37 @@ export class GameSession {
       });
     } else if (ochoPlayer?.pendingOcho) {
       io.to(player.socketId).emit("ocho:state", this.buildOchoStatePayload(ochoPlayer));
+    }
+
+    // Stessa cosa per ACCHIAPPA LA PAPERA (mondo "ghiacciaia"): schermata di
+    // conferma categoria, griglia premi già aperta, oppure domanda del quiz
+    // attualmente in corso (l'eventuale lampeggio verde/rosso della risposta
+    // appena data non viene rimandato: è un dettaglio transitorio, stesso
+    // trattamento riservato a top5/caroamico/tct su riconnessione).
+    const duckPlayer = [...this.players.values()].find((p) => p.pendingDuck);
+    if (duckPlayer?.awaitingDuckStart) {
+      const { categoryId, categoryName, categoryEmoji } = duckPlayer.pendingDuck!;
+      io.to(player.socketId).emit("duck:categoryDrawn", {
+        playerId: duckPlayer.id,
+        categoryId,
+        categoryName,
+        categoryEmoji,
+      });
+    } else if (duckPlayer?.pendingDuck?.grid) {
+      io.to(player.socketId).emit("duck:gridState", this.buildDuckGridPayload(duckPlayer));
+    } else if (duckPlayer?.pendingDuck && duckPlayer.pendingDuck.questionIndex >= 0) {
+      const duck = duckPlayer.pendingDuck;
+      const q = duck.questions[duck.questionIndex];
+      io.to(player.socketId).emit("duck:question", {
+        playerId: duckPlayer.id,
+        categoryName: duck.categoryName,
+        categoryEmoji: duck.categoryEmoji,
+        questionIndex: duck.questionIndex,
+        totalQuestions: duck.questions.length,
+        question: { question: q.question, options: q.options },
+        correctSoFar: duck.correctCount,
+        wrongSoFar: duck.wrongCount,
+      });
     }
 
     // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
@@ -1495,6 +1564,15 @@ export class GameSession {
       return;
     }
 
+    // Anche il mondo "ghiacciaia" (ACCHIAPPA LA PAPERA) ha una meccanica
+    // dedicata: si estrae prima una categoria dalla ruota (come in Top5),
+    // poi il giocatore stesso risponde da solo, senza host, a un quiz di
+    // massimo 4 domande.
+    if (worldId === "ghiacciaia") {
+      this.beginDuck(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -1947,6 +2025,225 @@ export class GameSession {
 
     io.emit("ocho:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+
+  // Avvia il minigioco ACCHIAPPA LA PAPERA (mondo "ghiacciaia"): pesca una
+  // categoria (escludendo quelle già giocate in questa partita) e rimescola
+  // le opzioni delle sue 4 domande, poi mostra l'animazione della ruota
+  // verticale e rivela la categoria a tutti.
+  private beginDuck(player: InternalPlayer, io: IOServer) {
+    const category = pickRandomDuckCategory(this.playedDuckCategoryIds);
+    this.playedDuckCategoryIds.add(category.id);
+    const rawQuestions = getDuckQuestions(category.id);
+    const questions = shuffleDuckQuestions(rawQuestions);
+
+    player.pendingDuck = {
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryEmoji: category.emoji,
+      questions,
+      questionIndex: -1,
+      correctCount: 0,
+      wrongCount: 0,
+      awaitingAnswer: false,
+      grid: null,
+      ended: false,
+    };
+    const durationMs = 2600;
+
+    io.emit("duck:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingDuck || player.pendingDuck.categoryId !== category.id) return;
+      player.awaitingDuckStart = true;
+      io.emit("duck:categoryDrawn", {
+        playerId: player.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Conferma la categoria e fa partire la prima domanda del quiz.
+  beginDuckGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingDuckStart || !player.pendingDuck) return;
+    player.awaitingDuckStart = false;
+    this.advanceDuckQuestion(player, io);
+  }
+
+  // Manda al giocatore la prossima domanda del quiz (quella dopo
+  // questionIndex), aggiornando l'indice e riaprendo l'attesa di risposta.
+  private advanceDuckQuestion(player: InternalPlayer, io: IOServer) {
+    const duck = player.pendingDuck;
+    if (!duck) return;
+    duck.questionIndex += 1;
+    duck.awaitingAnswer = true;
+    const q = duck.questions[duck.questionIndex];
+    io.emit("duck:question", {
+      playerId: player.id,
+      categoryName: duck.categoryName,
+      categoryEmoji: duck.categoryEmoji,
+      questionIndex: duck.questionIndex,
+      totalQuestions: duck.questions.length,
+      question: { question: q.question, options: q.options },
+      correctSoFar: duck.correctCount,
+      wrongSoFar: duck.wrongCount,
+    });
+  }
+
+  // Registra la risposta alla domanda corrente. Il quiz si ferma SUBITO
+  // appena l'esito è matematicamente deciso: 3 corrette (qualificato, passa
+  // alla griglia premi) oppure 2 errori prima di arrivare a 3 corrette
+  // (fallito, prova persa, niente griglia) — così come confermato dall'utente,
+  // senza aspettare la quarta domanda se non serve più.
+  answerDuck(playerId: string, questionIndex: number, answerIndex: number | null, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player || !player.pendingDuck) return;
+    const duck = player.pendingDuck;
+    if (!duck.awaitingAnswer || duck.questionIndex !== questionIndex) return;
+    duck.awaitingAnswer = false;
+
+    const q = duck.questions[duck.questionIndex];
+    const correct = answerIndex !== null && answerIndex === q.correctIndex;
+    if (correct) duck.correctCount += 1;
+    else duck.wrongCount += 1;
+
+    const qualified = duck.correctCount >= 3;
+    const failed = !qualified && duck.wrongCount >= 2;
+
+    io.emit("duck:answerResult", {
+      playerId: player.id,
+      questionIndex: duck.questionIndex,
+      correct,
+      correctIndex: q.correctIndex,
+      correctSoFar: duck.correctCount,
+      wrongSoFar: duck.wrongCount,
+      qualified,
+      failed,
+    });
+
+    // Diamo un attimo di tempo per vedere il colore verde/rosso della
+    // risposta prima di passare oltre (stesso ritmo dell'attesa usata da
+    // OCHO ALLA BOMBA tra un'azione e l'altra).
+    const REVEAL_DELAY_MS = 1800;
+    setTimeout(() => {
+      if (player.pendingDuck !== duck) return; // il giocatore potrebbe aver lasciato il mondo nel frattempo
+      if (qualified) {
+        this.beginDuckGrid(player, io);
+      } else if (failed) {
+        this.finishDuckWithoutGrid(player, io);
+      } else if (duck.questionIndex + 1 < duck.questions.length) {
+        this.advanceDuckQuestion(player, io);
+      } else {
+        // sicurezza: esaurite le 4 domande senza 3 corrette né 2 errori
+        // (non dovrebbe capitare matematicamente, ma non blocchiamo il gioco)
+        this.finishDuckWithoutGrid(player, io);
+      }
+    }, REVEAL_DELAY_MS);
+  }
+
+  // Il quiz è stato superato: prepara la griglia premi (9 caselle, valori
+  // rimescolati a ogni accesso) e la manda a tutti, ancora tutta coperta.
+  private beginDuckGrid(player: InternalPlayer, io: IOServer) {
+    const duck = player.pendingDuck;
+    if (!duck) return;
+    const prizes = shuffleDuckPrizes();
+    duck.grid = prizes.map((prize) => ({ prize, revealed: false, chosen: false }));
+    this.broadcastDuckGrid(player, io);
+  }
+
+  private buildDuckGridPayload(player: InternalPlayer) {
+    const duck = player.pendingDuck!;
+    return {
+      playerId: player.id,
+      categoryName: duck.categoryName,
+      categoryEmoji: duck.categoryEmoji,
+      cells: duck.grid!.map((c) => ({
+        revealed: c.revealed,
+        prize: c.revealed ? c.prize : null,
+        chosen: c.chosen,
+      })),
+    };
+  }
+
+  private broadcastDuckGrid(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingDuck?.grid) return;
+    io.emit("duck:gridState", this.buildDuckGridPayload(player));
+  }
+
+  // Il giocatore stesso (nessun host coinvolto) sceglie UNA delle 9 caselle:
+  // si svelano SUBITO tutte le posizioni dei premi, ma solo quello della
+  // cella scelta viene poi assegnato in monete (dopo una breve pausa per
+  // lasciar vedere il reveal completo).
+  selectDuckCell(playerId: string, index: number, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player?.pendingDuck?.grid) return;
+    const duck = player.pendingDuck;
+    if (duck.ended) return;
+    if (index < 0 || index >= duck.grid!.length) return;
+    if (duck.grid!.some((c) => c.revealed)) return; // scelta già fatta
+
+    duck.grid!.forEach((c) => {
+      c.revealed = true;
+    });
+    duck.grid![index].chosen = true;
+    duck.ended = true;
+    const chosenPrize = duck.grid![index].prize;
+
+    this.broadcastDuckGrid(player, io);
+
+    const REVEAL_DELAY_MS = 3000;
+    setTimeout(() => {
+      this.finalizeDuck(player, chosenPrize, io);
+    }, REVEAL_DELAY_MS);
+  }
+
+  // Quiz fallito prima della griglia: nessun premio, prova persa.
+  private finishDuckWithoutGrid(player: InternalPlayer, io: IOServer) {
+    this.finalizeDuck(player, 0, io);
+  }
+
+  // Applica i moltiplicatori di stato (vincita doppia/tripla/dimezzata) e le
+  // figurine passive, assegna le monete, avanza il turno e notifica tutti:
+  // stessa logica di resolveOcho più sopra, semplicemente innescata in
+  // automatico dal server invece che da una conferma dell'host.
+  private finalizeDuck(player: InternalPlayer, baseCoins: number, io: IOServer) {
+    if (!player.pendingDuck) return;
+    player.pendingDuck = null;
+
+    this.applyPassiveCardEffects(player);
+
+    let finalCoins = baseCoins;
+
+    const doubleIdx = player.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      finalCoins *= 2;
+      player.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = player.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      finalCoins *= 3;
+      player.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = player.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      finalCoins = Math.floor(finalCoins / 2);
+      player.statuses.splice(halveIdx, 1);
+    }
+
+    player.coins += finalCoins;
+    player.pendingWorldId = null;
+
+    io.emit("duck:ended", { playerId: player.id, coinsAwarded: finalCoins });
+    this.maybeAdvanceTurn(player, io);
     this.broadcastState(io);
   }
 
