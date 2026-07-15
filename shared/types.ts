@@ -578,7 +578,7 @@ export interface ServerToClientEvents {
   "shop:packOpened": (payload: PackOpenedPayload) => void;
 
   "top5:spin": (payload: { playerId: string; durationMs: number }) => void;
-  "top5:categoryDrawn": (payload: { playerId: string; title: string; source?: string }) => void;
+  "top5:categoryDrawn": (payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }) => void;
   "top5:state": (payload: Top5State) => void;
   "top5:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
 
