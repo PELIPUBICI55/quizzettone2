@@ -39,6 +39,9 @@ import { DuckWheel } from "./components/DuckWheel";
 import { DuckCategoryReveal } from "./components/DuckCategoryReveal";
 import { DuckQuiz } from "./components/DuckQuiz";
 import { DuckGrid } from "./components/DuckGrid";
+import { ParticolareWheel } from "./components/ParticolareWheel";
+import { ParticolareCategoryReveal } from "./components/ParticolareCategoryReveal";
+import { ParticolareGame } from "./components/ParticolareGame";
 import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -55,6 +58,7 @@ import { FullCollectionMenu } from "./components/FullCollectionMenu";
 import { PartyMenu } from "./components/PartyMenu";
 import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
+import type { ParticolareCategoryId, ParticolareQuestionPayload, ParticolareEndedPayload } from "../shared/types";
 
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
@@ -117,6 +121,16 @@ export default function App() {
   const [duckAnswerResult, setDuckAnswerResult] = useState<DuckAnswerResultPayload | null>(null);
   const [duckGridState, setDuckGridState] = useState<DuckGridStatePayload | null>(null);
   const [duckEnded, setDuckEnded] = useState<DuckEndedPayload | null>(null);
+  const [particolareSpinInfo, setParticolareSpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [particolareCategoryInfo, setParticolareCategoryInfo] = useState<{
+    playerId: string;
+    categoryId: ParticolareCategoryId;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
+  const [particolareQuestion, setParticolareQuestion] = useState<ParticolareQuestionPayload | null>(null);
   const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
   const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
   const [tctQuestionResultInfo, setTctQuestionResultInfo] =
@@ -161,6 +175,9 @@ export default function App() {
       setDuckAnswerResult(null);
       setDuckGridState(null);
       setDuckEnded(null);
+      setParticolareSpinInfo(null);
+      setParticolareCategoryInfo(null);
+      setParticolareQuestion(null);
       setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
@@ -311,6 +328,31 @@ export default function App() {
       setDuckQuestion(null);
       setDuckAnswerResult(null);
     };
+    const onParticolareSpin = (p: { playerId: string; durationMs: number }) => {
+      setWelcomeInfo(null);
+      setParticolareSpinInfo(p);
+      setParticolareCategoryInfo(null);
+      setParticolareQuestion(null);
+    };
+    const onParticolareCategory = (p: {
+      playerId: string;
+      categoryId: ParticolareCategoryId;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
+      setParticolareSpinInfo(null);
+      setParticolareCategoryInfo(p);
+      setParticolareQuestion(null);
+    };
+    const onParticolareQuestion = (p: ParticolareQuestionPayload) => {
+      setParticolareCategoryInfo(null);
+      setParticolareQuestion(p);
+    };
+    const onParticolareEnded = (_p: ParticolareEndedPayload) => {
+      setParticolareQuestion(null);
+      setParticolareSpinInfo(null);
+      setParticolareCategoryInfo(null);
+    };
     const onTctStarted = (p: TctStartedPayload) => {
       setWelcomeInfo(null);
       setTctStartedInfo(p);
@@ -384,6 +426,10 @@ export default function App() {
     socket.on("duck:answerResult", onDuckAnswerResult);
     socket.on("duck:gridState", onDuckGridState);
     socket.on("duck:ended", onDuckEnded);
+    socket.on("particolare:spin", onParticolareSpin);
+    socket.on("particolare:categoryDrawn", onParticolareCategory);
+    socket.on("particolare:question", onParticolareQuestion);
+    socket.on("particolare:ended", onParticolareEnded);
     socket.on("tct:started", onTctStarted);
     socket.on("tct:question", onTctQuestion);
     socket.on("tct:questionResult", onTctQuestionResult);
@@ -424,6 +470,10 @@ export default function App() {
       socket.off("duck:answerResult", onDuckAnswerResult);
       socket.off("duck:gridState", onDuckGridState);
       socket.off("duck:ended", onDuckEnded);
+      socket.off("particolare:spin", onParticolareSpin);
+      socket.off("particolare:categoryDrawn", onParticolareCategory);
+      socket.off("particolare:question", onParticolareQuestion);
+      socket.off("particolare:ended", onParticolareEnded);
       socket.off("tct:started", onTctStarted);
       socket.off("tct:question", onTctQuestion);
       socket.off("tct:questionResult", onTctQuestionResult);
@@ -462,6 +512,9 @@ export default function App() {
     setDuckCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setDuckQuestion((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setDuckGridState((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setParticolareSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setParticolareCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setParticolareQuestion((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -556,6 +609,9 @@ export default function App() {
   const duckCategoryPlayer = state.players.find((p) => p.id === duckCategoryInfo?.playerId);
   const duckQuestionPlayer = state.players.find((p) => p.id === duckQuestion?.playerId);
   const duckGridPlayer = state.players.find((p) => p.id === duckGridState?.playerId);
+  const particolareSpinPlayer = state.players.find((p) => p.id === particolareSpinInfo?.playerId);
+  const particolareCategoryPlayer = state.players.find((p) => p.id === particolareCategoryInfo?.playerId);
+  const particolareQuestionPlayer = state.players.find((p) => p.id === particolareQuestion?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -666,6 +722,25 @@ export default function App() {
             ended={duckEnded}
             isMine={duckGridState.playerId === state.me.id}
             playerName={duckGridPlayer?.name ?? "?"}
+          />
+        ) : particolareSpinInfo ? (
+          <ParticolareWheel
+            isMine={particolareSpinInfo.playerId === state.me.id}
+            playerName={particolareSpinPlayer?.name ?? "?"}
+          />
+        ) : particolareCategoryInfo ? (
+          <ParticolareCategoryReveal
+            categoryName={particolareCategoryInfo.categoryName}
+            categoryEmoji={particolareCategoryInfo.categoryEmoji}
+            isMine={particolareCategoryInfo.playerId === state.me.id}
+            playerName={particolareCategoryPlayer?.name ?? "?"}
+          />
+        ) : particolareQuestion ? (
+          <ParticolareGame
+            payload={particolareQuestion}
+            isHost={state.me.isHost}
+            isMine={particolareQuestion.playerId === state.me.id}
+            playerName={particolareQuestionPlayer?.name ?? "?"}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel

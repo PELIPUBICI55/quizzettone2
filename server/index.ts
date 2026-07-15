@@ -171,6 +171,41 @@ io.on("connection", (socket) => {
     session?.selectDuckCell(loc.playerId, index, io);
   });
 
+  socket.on("particolare:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginParticolareGame(loc.playerId, io);
+  });
+
+  socket.on("particolare:nextQuestion", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.nextParticolareQuestion(loc.playerId, io);
+  });
+
+  socket.on("particolare:reveal", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.revealParticolareAnswer(loc.playerId, io);
+  });
+
+  socket.on("particolare:mediaControl", ({ action }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.particolareMediaControl(loc.playerId, action, io);
+  });
+
+  socket.on("particolare:resolve", ({ coinsAwarded }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveParticolare(loc.playerId, coinsAwarded, io);
+  });
+
   socket.on("tct:answer", ({ answerIndex }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

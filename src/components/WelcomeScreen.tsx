@@ -16,8 +16,8 @@ const TCT_ENTRY_FEE = 100;
 
 // Descrizione mostrata all'arrivo su ogni mondo, specifica per la sua
 // meccanica dedicata (se ne ha una). I mondi senza ancora una meccanica
-// propria (foresta, ghiacciaia, cieli, rovine) restano sul testo generico
-// del quiz a risposta multipla.
+// propria (cieli, rovine) restano sul testo generico del quiz a risposta
+// multipla.
 function worldDescription(worldId: string | undefined): string {
   switch (worldId) {
     case "vulcano":
@@ -47,6 +47,15 @@ function worldDescription(worldId: string | undefined): string {
         "risposta doppia. Deve azzeccarne 3 su 4 per accedere alla griglia dei 9 premi nascosti " +
         "(500-100-100-50-50-50-50-40-40): sceglie una casella, si svelano subito tutti i premi, " +
         "ma solo quello scelto viene assegnato in monete, in automatico."
+      );
+    case "foresta":
+      return (
+        "Qui si gioca a Grandioso Quiz Particolare: la ruota estrae una fra 5 categorie " +
+        "(Animali, Serie TV, Film, Musica, Videogiochi) e gioca solo il giocatore di turno, " +
+        "che risponde A VOCE a 2 domande. Animali/Videogiochi/Film mostrano un dettaglio " +
+        "ravvicinato da indovinare (poi la foto intera alla rivelazione); Musica/Serie TV fanno " +
+        "ascoltare un brano/sigla a tutti (ma solo l'host vede il video, per non spoilerare). " +
+        "L'host gestisce prossima domanda/svela risposta e infine assegna 0, 50 o 100 monete."
       );
     default:
       return (

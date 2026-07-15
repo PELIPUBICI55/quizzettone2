@@ -3,6 +3,7 @@ import type {
   BoardPosition,
   CardDef,
   CardEffectType,
+  CardRarity,
   CaroAmicoDomandaDef,
   CaroAmicoPersonaDef,
   ClientToServerEvents,
@@ -11,6 +12,7 @@ import type {
   PawnToken,
   PlayerStatus,
   ServerToClientEvents,
+  ParticolareCategoryId,
   StatusType,
   SurpriseCardDef,
   Top5CategoryDef,
@@ -38,6 +40,10 @@ import {
   shuffleDuckPrizes,
   DuckQuestionInternal,
 } from "../data/duck.js";
+import {
+  pickRandomParticolareCategory,
+  pickRandomParticolareItems,
+} from "../data/particolare.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -125,6 +131,28 @@ interface PendingDuck {
   ended: boolean; // true a griglia rivelata (scelta fatta), oppure a quiz fallito
 }
 
+// Stato di un round di GRANDIOSO QUIZ PARTICOLARE (mondo "foresta") in corso.
+// Gioca solo il giocatore di turno, che risponde A VOCE: come in CaroAmico/
+// Ocho, è l'host a gestire i controlli (prossima domanda / svela risposta /
+// assegna monete). Un solo premio finale (0/50/100) per l'intero round di 2
+// domande, non uno a domanda.
+interface PendingParticolareItem {
+  id: string;
+  answer: string;
+  media:
+    | { kind: "image"; detailUrl: string; fullUrl: string }
+    | { kind: "youtube"; videoId: string };
+}
+
+interface PendingParticolare {
+  categoryId: ParticolareCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  items: PendingParticolareItem[]; // esattamente 2
+  questionIndex: number; // 0 oppure 1
+  revealed: boolean; // true dopo che l'host ha svelato la risposta della domanda corrente
+}
+
 interface InternalPlayer {
   id: string;
   socketId: string;
@@ -169,6 +197,8 @@ interface InternalPlayer {
   awaitingOchoStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
   pendingDuck: PendingDuck | null;
   awaitingDuckStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
+  pendingParticolare: PendingParticolare | null;
+  awaitingParticolareStart: boolean; // sulla schermata di conferma categoria, in attesa che il giocatore di turno clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
@@ -181,6 +211,7 @@ const TCT_TIME_LIMIT_SEC = 10;
 const TCT_REVEAL_DELAY_MS = 3500;
 const TCT_INTRO_DELAY_MS = 2200;
 const OCHO_VALID_REWARDS = [0, 50, 100];
+const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -222,6 +253,7 @@ export class GameSession {
   // Id delle categorie di ACCHIAPPA LA PAPERA già uscite in questa partita,
   // stesso motivo di playedOchoIds.
   private playedDuckCategoryIds = new Set<string>();
+  private playedParticolareItemIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -277,6 +309,8 @@ export class GameSession {
       awaitingOchoStart: false,
       pendingDuck: null,
       awaitingDuckStart: false,
+      pendingParticolare: null,
+      awaitingParticolareStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -432,6 +466,25 @@ export class GameSession {
         correctSoFar: duck.correctCount,
         wrongSoFar: duck.wrongCount,
       });
+    }
+
+    // Stessa cosa per GRANDIOSO QUIZ PARTICOLARE (mondo "foresta"): schermata
+    // di conferma categoria, oppure la domanda corrente (con risposta
+    // rivelata o meno a seconda di dove si era arrivati).
+    const particolarePlayer = [...this.players.values()].find((p) => p.pendingParticolare);
+    if (particolarePlayer?.awaitingParticolareStart) {
+      const { categoryId, categoryName, categoryEmoji } = particolarePlayer.pendingParticolare!;
+      io.to(player.socketId).emit("particolare:categoryDrawn", {
+        playerId: particolarePlayer.id,
+        categoryId,
+        categoryName,
+        categoryEmoji,
+      });
+    } else if (particolarePlayer?.pendingParticolare) {
+      io.to(player.socketId).emit(
+        "particolare:question",
+        this.buildParticolareQuestionPayload(particolarePlayer)
+      );
     }
 
     // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
@@ -1573,6 +1626,14 @@ export class GameSession {
       return;
     }
 
+    // Il mondo "foresta" (GRANDIOSO QUIZ PARTICOLARE) ha una meccanica
+    // dedicata: gioca solo il giocatore di turno, che risponde A VOCE.
+    // Come in CaroAmico/Ocho, è l'host a gestire i controlli.
+    if (worldId === "foresta") {
+      this.beginParticolare(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -2247,6 +2308,177 @@ export class GameSession {
     this.broadcastState(io);
   }
 
+  // Avvia GRANDIOSO QUIZ PARTICOLARE (mondo "foresta"): pesca una categoria
+  // a caso fra le 5 (Animali/Serie TV/Film/Musica/Videogiochi, senza vincolo
+  // di non ripetizione: sono solo 5 e le partite durano a lungo) e 2 item
+  // distinti al suo interno (questi sì, mai ripetuti nella stessa partita).
+  private beginParticolare(player: InternalPlayer, io: IOServer) {
+    const category = pickRandomParticolareCategory();
+    const rawItems = pickRandomParticolareItems(category.id, 2, this.playedParticolareItemIds);
+    for (const item of rawItems) this.playedParticolareItemIds.add(item.id);
+
+    const items: PendingParticolareItem[] = rawItems.map((item) => {
+      if ("videoId" in item) {
+        return { id: item.id, answer: item.answer, media: { kind: "youtube", videoId: item.videoId } };
+      }
+      return {
+        id: item.id,
+        answer: item.answer,
+        media: { kind: "image", detailUrl: item.detailUrl, fullUrl: item.fullUrl },
+      };
+    });
+
+    player.pendingParticolare = {
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryEmoji: category.emoji,
+      items,
+      questionIndex: 0,
+      revealed: false,
+    };
+
+    const durationMs = 2600;
+    io.emit("particolare:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingParticolare || player.pendingParticolare.categoryId !== category.id) return;
+      player.awaitingParticolareStart = true;
+      io.emit("particolare:categoryDrawn", {
+        playerId: player.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Conferma la categoria e mostra la prima delle 2 domande.
+  beginParticolareGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingParticolareStart || !player.pendingParticolare) return;
+    player.awaitingParticolareStart = false;
+    this.broadcastParticolareQuestion(player, io);
+  }
+
+  // Costruisce il payload della domanda corrente: per le categorie a
+  // immagine, mostra sempre detailUrl (e fullUrl solo se rivelata); per le
+  // categorie YouTube, il videoId è SEMPRE incluso per tutti i client (serve
+  // l'audio ovunque), è il client stesso a nascondere il player visivamente
+  // se non è l'host, per non spoilerare la risposta.
+  private buildParticolareQuestionPayload(player: InternalPlayer) {
+    const p = player.pendingParticolare!;
+    const item = p.items[p.questionIndex];
+    const media =
+      item.media.kind === "image"
+        ? { kind: "image" as const, detailUrl: item.media.detailUrl, fullUrl: p.revealed ? item.media.fullUrl : undefined }
+        : { kind: "youtube" as const, videoId: item.media.videoId };
+
+    return {
+      playerId: player.id,
+      categoryId: p.categoryId,
+      categoryName: p.categoryName,
+      categoryEmoji: p.categoryEmoji,
+      questionIndex: p.questionIndex,
+      totalQuestions: p.items.length,
+      media,
+      revealed: p.revealed,
+      answer: p.revealed ? item.answer : null,
+    };
+  }
+
+  // Manda lo stato della domanda corrente a TUTTI i client con lo stesso
+  // payload (incluso il videoId per le categorie YouTube: l'audio deve
+  // riprodursi sul dispositivo di ognuno). È il CLIENT a decidere, in base
+  // al proprio isHost, se mostrare il player video oppure tenerlo presente
+  // ma nascosto visivamente (solo l'host deve poter leggere titolo/anteprima
+  // del video, per non spoilerare la risposta agli altri).
+  private broadcastParticolareQuestion(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingParticolare) return;
+    io.emit("particolare:question", this.buildParticolareQuestionPayload(player));
+  }
+
+  // Solo l'host può passare alla domanda successiva (dopo che il giocatore
+  // di turno ha risposto a voce alla prima).
+  nextParticolareQuestion(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingParticolare);
+    if (!target?.pendingParticolare) return;
+    const p = target.pendingParticolare;
+    if (p.questionIndex >= p.items.length - 1) return;
+    p.questionIndex += 1;
+    p.revealed = false;
+    this.broadcastParticolareQuestion(target, io);
+  }
+
+  // Solo l'host può svelare la risposta corretta della domanda corrente
+  // (dopo che il giocatore di turno l'ha detta a voce). Per le categorie a
+  // immagine, questo mostra anche la foto intera oltre al dettaglio.
+  revealParticolareAnswer(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingParticolare);
+    if (!target?.pendingParticolare) return;
+    target.pendingParticolare.revealed = true;
+    this.broadcastParticolareQuestion(target, io);
+  }
+
+  // L'host preme play/pausa/riavvolgi sul suo player YouTube: viene
+  // ribroadcastato a tutti così che il player (nascosto visivamente, ma
+  // presente e in ascolto) di ogni client resti sincronizzato e l'audio
+  // parta/si fermi/riparta da capo su OGNI dispositivo, non solo su quello
+  // dell'host.
+  particolareMediaControl(hostId: string, action: "play" | "pause" | "rewind", io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!host.pendingParticolare && ![...this.players.values()].some((p) => p.pendingParticolare)) return;
+    io.emit("particolare:mediaControl", { action });
+  }
+
+  // Solo l'host decreta il premio finale per l'intero minigioco (0, 50 o
+  // 100 monete): stessi moltiplicatori di stato degli altri minigiochi.
+  resolveParticolare(hostId: string, coinsAwarded: number, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingParticolare);
+    if (!target?.pendingParticolare) return;
+    if (!PARTICOLARE_VALID_REWARDS.includes(coinsAwarded)) return;
+
+    target.pendingParticolare = null;
+
+    this.applyPassiveCardEffects(target);
+
+    let finalCoins = coinsAwarded;
+
+    const doubleIdx = target.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      finalCoins *= 2;
+      target.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = target.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      finalCoins *= 3;
+      target.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = target.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      finalCoins = Math.floor(finalCoins / 2);
+      target.statuses.splice(halveIdx, 1);
+    }
+
+    target.coins += finalCoins;
+    target.pendingWorldId = null;
+
+    io.emit("particolare:ended", { playerId: target.id, coinsAwarded: finalCoins });
+    this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+
   // Avvia il round di TCT (mondo "abisso"): tutti i giocatori connessi con
   // almeno 100 monete vengono iscritti automaticamente, pagano la quota
   // (che forma il montepremi) e si pescano le domande. La condizione per
@@ -2665,23 +2897,20 @@ export class GameSession {
         this.broadcastState(io);
         return;
       }
-      player.pendingChoice = { kind: "stealAllFromTwo", targets: [] };
+      const targets = others.map((p) => p.id);
+      player.pendingChoice = { kind: "stealAllFromTwo", targets };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
     if (cardDef.effect.type === "swapZeroTripleWin") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-
       const others = [...this.players.values()].filter(
         (p) => p.id !== player.id && p.connected
       );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
+      if (others.length === 0) return;
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
       player.pendingChoice = { kind: "swapZeroTripleWin" };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
@@ -2698,143 +2927,67 @@ export class GameSession {
     }
 
     if (cardDef.effect.type === "forceSkipTurn") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-
       const others = [...this.players.values()].filter(
         (p) => p.id !== player.id && p.connected
       );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
+      if (others.length === 0) return;
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
       player.pendingChoice = { kind: "forceSkipTurn" };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
-    if (cardDef.effect.type === "gainThreeShields") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-      for (let i = 0; i < 3; i++) {
-        this.addStatus(
-          player,
-          "shield",
-          "Scudo",
-          "🛡️",
-          "Puoi annullare un effetto subito in futuro. Si consuma dopo l'uso."
-        );
-      }
-      this.broadcastState(io);
-      return;
-    }
-
-    if (cardDef.effect.type === "moveAllToCittadella") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-
+    if (cardDef.effect.type === "steal200Coins" || cardDef.effect.type === "steal20Coins") {
       const others = [...this.players.values()].filter(
         (p) => p.id !== player.id && p.connected
       );
-      for (const opp of others) {
-        this.maybeShield(
-          opp,
-          `${player.name} vuole spostarti alla Cittadella! Vuoi bloccarlo con uno scudo?`,
-          io,
-          (blocked) => {
-            if (!blocked) {
-              opp.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
-              this.resolveArrival(opp, CITTADELLA_ID, io);
-            }
-            this.broadcastState(io);
-          }
-        );
-      }
-      this.broadcastState(io);
-      return;
-    }
-
-    if (cardDef.effect.type === "teleportSelfToCittadella") {
+      if (others.length === 0) return;
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      player.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
-      this.resolveArrival(player, CITTADELLA_ID, io);
-      this.broadcastState(io);
-      return;
-    }
-    if (cardDef.effect.type === "steal200Coins") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-      const others = [...this.players.values()].filter(
-        (p) => p.id !== player.id && p.connected
-      );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
-      player.pendingChoice = { kind: "stealCoins", amount: 200 };
+      const amount = cardDef.effect.type === "steal200Coins" ? 200 : 20;
+      player.pendingChoice = { kind: "stealCoins", amount };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
     if (cardDef.effect.type === "swapPositionChosen") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
       const others = [...this.players.values()].filter(
         (p) => p.id !== player.id && p.connected
       );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
+      if (others.length === 0) return;
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
       player.pendingChoice = { kind: "swapPosition" };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
-    if (cardDef.effect.type === "gainFreeChest") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-      this.addStatus(
-        player,
-        "freeChest",
-        "Baule gratis",
-        "🎁",
-        "Il prossimo Baule del Mercante comprato alla Cittadella non costa nulla."
-      );
-      this.broadcastState(io);
-      return;
-    }
-
     if (cardDef.effect.type === "discardTwoRandomFromChosen") {
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected && p.collection.length > 0
+      );
+      if (others.length === 0) return;
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      const others = [...this.players.values()].filter(
-        (p) => p.id !== player.id && p.connected
-      );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
       player.pendingChoice = { kind: "discardFromChosen" };
       this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
-    if (cardDef.effect.type === "gainDoubleWin") {
+    if (cardDef.effect.type === "moveChosenBackwardOne") {
+      const others = [...this.players.values()].filter(
+        (p) => p.id !== player.id && p.connected
+      );
+      if (others.length === 0) return;
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      this.addStatus(
-        player,
-        "doubleWin",
-        "Vincita raddoppiata",
-        "✨",
-        "Il prossimo gioco vinto in un mondo pagherà il doppio delle monete."
-      );
+      player.pendingChoice = { kind: "moveBackwardChosen" };
+      this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
@@ -2856,33 +3009,12 @@ export class GameSession {
     if (cardDef.effect.type === "advanceOneTile") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      if (this.currentTurnPlayerId() === player.id) {
-        this.dispatchSelfAdvance(player, 1, io);
-      } else {
-        // effetto rapido usato fuori dal tuo turno: spostamento "leggero",
-        // senza controllo imprevisti né apertura mercato/mondo
-        this.simpleReposition(player, 1);
-        this.broadcastState(io);
-      }
+      this.dispatchSelfAdvance(player, 1, io);
       return;
     }
 
-    if (cardDef.effect.type === "moveChosenBackwardOne") {
-      this.consumeCardInstance(player, instance);
-      player.cardsUsedThisTurn.add(cardId);
-      const others = [...this.players.values()].filter(
-        (p) => p.id !== player.id && p.connected
-      );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
-      }
-      player.pendingChoice = { kind: "moveBackwardChosen" };
-      this.emitChoiceOptions(player, io);
-      this.broadcastState(io);
-      return;
-    }
-
+    // effetti istantanei senza scelta di bersaglio: si applicano subito al
+    // giocatore stesso
     if (cardDef.effect.type === "gain20Coins") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
@@ -2894,33 +3026,33 @@ export class GameSession {
     if (cardDef.effect.type === "gainOneShield") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      this.addStatus(
-        player,
-        "shield",
-        "Scudo",
-        "🛡️",
-        "Puoi annullare un effetto subito in futuro. Si consuma dopo l'uso."
-      );
+      this.addStatus(player, "shield", "Scudo", "🛡️", "Blocca il prossimo effetto negativo subito.");
       this.broadcastState(io);
       return;
     }
 
-    if (cardDef.effect.type === "gainRandomCommonCard") {
+    if (cardDef.effect.type === "gainThreeShields") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      const commons = CARD_CATALOG.filter((c) => c.rarity === "comune");
-      if (commons.length > 0) {
-        const picked = commons[Math.floor(Math.random() * commons.length)];
-        const owned = player.collection.filter((c) => c.cardId === picked.id).length;
-        const limit = picked.effect.isPassive ? 1 : MAX_CARD_COPIES;
-        if (owned < limit) {
-          player.collection.push({
-            instanceId: nextCardInstanceId(),
-            cardId: picked.id,
-            used: false,
-          });
-        }
+      for (let i = 0; i < 3; i++) {
+        this.addStatus(player, "shield", "Scudo", "🛡️", "Blocca il prossimo effetto negativo subito.");
       }
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "gainDoubleWin") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      this.addStatus(player, "doubleWin", "Vincita raddoppiata", "✨", "La prossima vincita di un minigioco sarà raddoppiata.");
+      this.broadcastState(io);
+      return;
+    }
+
+    if (cardDef.effect.type === "gainFreeChest") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      this.addStatus(player, "freeChest", "Baule gratis", "🎁", "Il prossimo Baule del Mercante comprato alla Cittadella non costa nulla.");
       this.broadcastState(io);
       return;
     }
@@ -2928,13 +3060,7 @@ export class GameSession {
     if (cardDef.effect.type === "gainFreePack") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      this.addStatus(
-        player,
-        "freePack",
-        "Pacchetto gratis",
-        "🎁",
-        "Il prossimo pacchetto base comprato alla Cittadella non costa nulla."
-      );
+      this.addStatus(player, "freePack", "Pacchetto gratis", "🎁", "Il prossimo pacchetto comprato alla Cittadella non costa nulla.");
       this.broadcastState(io);
       return;
     }
@@ -2947,85 +3073,121 @@ export class GameSession {
       return;
     }
 
-    if (cardDef.effect.type === "steal20Coins") {
+    if (cardDef.effect.type === "moveAllToCittadella") {
       this.consumeCardInstance(player, instance);
       player.cardsUsedThisTurn.add(cardId);
-      const others = [...this.players.values()].filter(
-        (p) => p.id !== player.id && p.connected
-      );
-      if (others.length === 0) {
-        this.broadcastState(io);
-        return;
+      for (const p of this.players.values()) {
+        if (p.id === player.id) continue;
+        p.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
       }
-      player.pendingChoice = { kind: "stealCoins", amount: 20 };
-      this.emitChoiceOptions(player, io);
       this.broadcastState(io);
       return;
     }
 
-    // se hai più copie la scarta, altrimenti la disattiva soltanto
-    this.consumeCardInstance(player, instance);
-    player.activeEffects.push(cardDef.effect.type);
-    player.cardsUsedThisTurn.add(cardId);
+    if (cardDef.effect.type === "teleportSelfToCittadella") {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      player.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
+      this.broadcastState(io);
+      return;
+    }
 
-    this.broadcastState(io);
+    if (cardDef.effect.type === "gainRandomCommonCard") {
+      const commons = CARD_CATALOG.filter(
+        (c) =>
+          c.rarity === "comune" &&
+          player.collection.filter((owned) => owned.cardId === c.id).length < MAX_CARD_COPIES
+      );
+      if (commons.length === 0) return;
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      const picked = commons[Math.floor(Math.random() * commons.length)];
+      player.collection.push({ instanceId: nextCardInstanceId(), cardId: picked.id, used: false });
+      this.broadcastState(io);
+      return;
+    }
+
+    // effetti "armati": non agiscono subito, restano pronti per il prossimo
+    // quiz che affronterai (consumati lì, vedi submitAnswer/sendNewQuestion)
+    if (
+      cardDef.effect.type === "extraTime" ||
+      cardDef.effect.type === "removeWrongOption" ||
+      cardDef.effect.type === "doubleCoins" ||
+      cardDef.effect.type === "secondChance" ||
+      cardDef.effect.type === "skipQuestion"
+    ) {
+      this.consumeCardInstance(player, instance);
+      player.cardsUsedThisTurn.add(cardId);
+      player.activeEffects = [...player.activeEffects, cardDef.effect.type];
+      this.broadcastState(io);
+      return;
+    }
   }
 
+  // Pesca un pacchetto di carte alla Cittadella. Rispetta lo stato "baule
+  // gratis"/"pacchetto gratis" (se posseduto, consuma quello status invece
+  // di scalare le monete) e il limite di 5 copie per carta: oltre la quinta,
+  // la carta viene comunque mostrata nell'apertura ma segnata "capped" e non
+  // aggiunta alla collezione.
   buyPack(playerId: string, packId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
-    if (!player.pendingShop) {
-      io.to(player.socketId).emit("error:message", {
-        message: "Devi prima raggiungere la Cittadella con la tua pedina.",
-      });
-      return;
-    }
     const pack = PACKS.find((p) => p.id === packId);
-    if (!pack) {
-      io.to(player.socketId).emit("error:message", {
-        message: "Pacchetto sconosciuto.",
-      });
-      return;
-    }
+    if (!pack) return;
 
     const freePackIdx = player.statuses.findIndex((s) => s.type === "freePack");
     const freeChestIdx = player.statuses.findIndex((s) => s.type === "freeChest");
-    const usesFreePack = freePackIdx !== -1 && pack.id === "pack-base";
-    const usesFreeChest = freeChestIdx !== -1 && pack.id === "pack-medio";
-    const cost = usesFreePack || usesFreeChest ? 0 : pack.cost;
-
-    if (player.coins < cost) {
-      io.to(player.socketId).emit("error:message", {
-        message: "Non hai abbastanza monete per questo pacchetto.",
-      });
-      return;
+    let isFree = false;
+    if (freePackIdx !== -1) {
+      player.statuses.splice(freePackIdx, 1);
+      isFree = true;
+    } else if (freeChestIdx !== -1 && packId === "pack-medio") {
+      player.statuses.splice(freeChestIdx, 1);
+      isFree = true;
     }
 
-    player.coins -= cost;
-    if (usesFreePack) player.statuses.splice(freePackIdx, 1);
-    if (usesFreeChest) player.statuses.splice(freeChestIdx, 1);
-
-    const drawnCards = pickRandomCards(pack.cardCount);
-    const resultCards: { card: CardDef; capped: boolean }[] = [];
-    for (const card of drawnCards) {
-      const owned = player.collection.filter((c) => c.cardId === card.id).length;
-      const limit = card.effect.isPassive ? 1 : MAX_CARD_COPIES;
-      if (owned >= limit) {
-        resultCards.push({ card, capped: true });
-        continue;
+    if (!isFree) {
+      if (player.coins < pack.cost) {
+        io.to(player.socketId).emit("error:message", {
+          message: "Non hai abbastanza monete per questo pacchetto.",
+        });
+        return;
       }
-      player.collection.push({
-        instanceId: nextCardInstanceId(),
-        cardId: card.id,
-        used: false,
-      });
-      resultCards.push({ card, capped: false });
+      player.coins -= pack.cost;
     }
 
-    io.to(player.socketId).emit("shop:packOpened", {
-      packId: pack.id,
-      cards: resultCards,
-    });
+    const RARITY_WEIGHTS: { rarity: CardRarity; weight: number }[] = [
+      { rarity: "comune", weight: 60 },
+      { rarity: "rara", weight: 25 },
+      { rarity: "epica", weight: 12 },
+      { rarity: "leggendaria", weight: 3 },
+    ];
+    const totalWeight = RARITY_WEIGHTS.reduce((sum, r) => sum + r.weight, 0);
+
+    const pulledCards: { card: CardDef; capped: boolean }[] = [];
+    for (let i = 0; i < pack.cardCount; i++) {
+      let roll = Math.random() * totalWeight;
+      let chosenRarity: CardRarity = "comune";
+      for (const r of RARITY_WEIGHTS) {
+        if (roll < r.weight) {
+          chosenRarity = r.rarity;
+          break;
+        }
+        roll -= r.weight;
+      }
+      let pool = CARD_CATALOG.filter((c) => c.rarity === chosenRarity);
+      if (pool.length === 0) pool = CARD_CATALOG;
+      const card = pool[Math.floor(Math.random() * pool.length)];
+
+      const owned = player.collection.filter((c) => c.cardId === card.id).length;
+      const capped = owned >= MAX_CARD_COPIES;
+      if (!capped) {
+        player.collection.push({ instanceId: nextCardInstanceId(), cardId: card.id, used: false });
+      }
+      pulledCards.push({ card, capped });
+    }
+
+    io.to(player.socketId).emit("shop:packOpened", { packId, cards: pulledCards });
     this.broadcastState(io);
   }
 }

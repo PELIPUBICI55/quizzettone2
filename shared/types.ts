@@ -396,6 +396,53 @@ export interface DuckEndedPayload {
   coinsAwarded: number; // 0 se il quiz è fallito prima della griglia, altrimenti il premio scelto
 }
 
+// --- Mondo "foresta" (GRANDIOSO QUIZ PARTICOLARE) ---------------------------
+// Gioca solo il giocatore di turno, che risponde A VOCE a 2 domande pescate
+// dalla categoria estratta dalla ruota (Animali, Serie TV, Film, Musica,
+// Videogiochi). Come in CaroAmico/Ocho, è l'host a gestire i controlli
+// (prossima domanda / svela risposta / assegna monete): qui l'host decide
+// un unico premio finale per l'intero minigioco (0, 50 o 100 monete).
+// Animali/Videogiochi/Film mostrano un'immagine (un dettaglio ravvicinato,
+// poi alla rivelazione anche la foto intera); Musica/Serie TV riproducono
+// un video YouTube (audio condiviso con tutti i client, ma il player video
+// visibile SOLO all'host per non spoilerare la risposta agli altri).
+
+export type ParticolareCategoryId = "animali" | "serie-tv" | "film" | "musica" | "videogiochi";
+export type ParticolareMediaKind = "image" | "youtube";
+
+export interface ParticolareCategoryDef {
+  id: ParticolareCategoryId;
+  name: string;
+  emoji: string;
+  mediaKind: ParticolareMediaKind;
+}
+
+export type ParticolareMediaPublic =
+  | { kind: "image"; detailUrl: string; fullUrl?: string } // fullUrl valorizzato solo dopo la rivelazione
+  | { kind: "youtube"; videoId: string }; // sempre presente: l'audio deve suonare su OGNI client;
+  // è il client stesso a nascondere visivamente il player se non è l'host
+
+export interface ParticolareQuestionPayload {
+  playerId: string;
+  categoryId: ParticolareCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  questionIndex: number; // 0 oppure 1
+  totalQuestions: number; // sempre 2
+  media: ParticolareMediaPublic;
+  revealed: boolean;
+  answer: string | null; // valorizzata solo quando revealed è true
+}
+
+export interface ParticolareMediaControlPayload {
+  action: "play" | "pause" | "rewind";
+}
+
+export interface ParticolareEndedPayload {
+  playerId: string;
+  coinsAwarded: number;
+}
+
 export interface PackOpenedPayload {
   packId: string;
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
@@ -491,27 +538,50 @@ export interface ClientToServerEvents {
   "duck:beginGame": () => void;
   "duck:answer": (payload: { questionIndex: number; answerIndex: number | null }) => void;
   "duck:selectCell": (payload: { index: number }) => void;
+  "particolare:beginGame": () => void;
+  "particolare:nextQuestion": () => void;
+  "particolare:reveal": () => void;
+  "particolare:mediaControl": (payload: ParticolareMediaControlPayload) => void;
+  "particolare:resolve": (payload: { coinsAwarded: number }) => void;
 }
 
 // Eventi server -> client
 export interface ServerToClientEvents {
-  "state:update": (state: GameStateSnapshot) => void;
+  "world:welcome": (payload: { playerId: string; worldId: string }) => void;
+  "wheel:spin": (payload: {
+    playerId: string;
+    worldId: string;
+    resultType: "quiz";
+    durationMs: number;
+  }) => void;
+  "wheel:result": (payload: { playerId: string; worldId: string; resultType: "quiz" }) => void;
+  "quiz:question": (payload: {
+    playerId: string;
+    question: QuizQuestion;
+    activeEffects: CardEffectType[];
+    eliminatedOptionIndex?: number;
+  }) => void;
+  "quiz:result": (payload: {
+    playerId: string;
+    correct: boolean;
+    correctIndex: number;
+    coinsAwarded: number;
+  }) => void;
   "board:diceRolled": (payload: { playerId: string; value: number }) => void;
-  "board:surpriseDrawn": (payload: SurpriseDrawnPayload) => void;
-  "board:chooseTarget": (payload: ChooseTargetPayload) => void;
+  "board:surpriseDrawn": (payload: { playerId: string; text: string; effectLabel: string }) => void;
   "board:useShieldPrompt": (payload: { message: string }) => void;
   "board:shieldUsed": (payload: { playerId: string }) => void;
-  "world:welcome": (payload: { playerId: string; worldId: string }) => void;
-  "wheel:spin": (payload: WheelSpinPayload) => void;
-  "wheel:result": (payload: { playerId: string; worldId: string; resultType: MinigameType }) => void;
-  "quiz:question": (payload: QuizQuestionPayload) => void;
-  "quiz:result": (payload: QuizResultPayload) => void;
+  "board:chooseTarget": (payload: ChooseTargetPayload) => void;
+  "state:update": (payload: GameStateSnapshot) => void;
+  "error:message": (payload: { message: string }) => void;
+  "party:kicked": () => void;
+  "shop:packOpened": (payload: PackOpenedPayload) => void;
+
   "top5:spin": (payload: { playerId: string; durationMs: number }) => void;
-  "top5:categoryDrawn": (
-    payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
-  ) => void;
+  "top5:categoryDrawn": (payload: { playerId: string; title: string; source?: string }) => void;
   "top5:state": (payload: Top5State) => void;
   "top5:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
+
   "caroamico:selfChoicePrompt": (
     payload: { playerId: string; personas: CaroAmicoPersonaDef[]; currentSelfId: string | null }
   ) => void;
@@ -521,17 +591,20 @@ export interface ServerToClientEvents {
   ) => void;
   "caroamico:state": (payload: CaroAmicoState) => void;
   "caroamico:ended": (payload: { playerId: string; won: boolean; coinsAwarded: number }) => void;
+
+  "tct:skipped": (payload: TctSkippedPayload) => void;
   "tct:started": (payload: TctStartedPayload) => void;
   "tct:question": (payload: TctQuestionPayload) => void;
   "tct:questionResult": (payload: TctQuestionResultPayload) => void;
   "tct:ended": (payload: TctEndedPayload) => void;
-  "tct:skipped": (payload: TctSkippedPayload) => void;
+
   "ocho:spin": (payload: { playerId: string; durationMs: number }) => void;
   "ocho:categoryDrawn": (
     payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
   ) => void;
   "ocho:state": (payload: OchoStatePayload) => void;
-  "ocho:ended": (payload: OchoEndedPayload) => void;
+  "ocho:ended": (payload: { playerId: string; coinsAwarded: number }) => void;
+
   "duck:spin": (payload: { playerId: string; durationMs: number }) => void;
   "duck:categoryDrawn": (
     payload: { playerId: string; categoryId: string; categoryName: string; categoryEmoji: string }
@@ -540,7 +613,12 @@ export interface ServerToClientEvents {
   "duck:answerResult": (payload: DuckAnswerResultPayload) => void;
   "duck:gridState": (payload: DuckGridStatePayload) => void;
   "duck:ended": (payload: DuckEndedPayload) => void;
-  "shop:packOpened": (payload: PackOpenedPayload) => void;
-  "error:message": (payload: { message: string }) => void;
-  "party:kicked": () => void;
+
+  "particolare:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "particolare:categoryDrawn": (
+    payload: { playerId: string; categoryId: ParticolareCategoryId; categoryName: string; categoryEmoji: string }
+  ) => void;
+  "particolare:question": (payload: ParticolareQuestionPayload) => void;
+  "particolare:mediaControl": (payload: ParticolareMediaControlPayload) => void;
+  "particolare:ended": (payload: ParticolareEndedPayload) => void;
 }
