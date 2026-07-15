@@ -57,6 +57,16 @@ function worldDescription(worldId: string | undefined): string {
         "ascoltare un brano/sigla a tutti (ma solo l'host vede il video, per non spoilerare). " +
         "L'host gestisce prossima domanda/svela risposta e infine assegna 0, 50 o 100 monete."
       );
+    case "cieli":
+      return (
+        "Qui si gioca a Il Grandioso Buzz: la ruota estrae una fra le stesse 5 categorie di " +
+        "Grandioso Quiz Particolare (Animali, Serie TV, Film, Musica, Videogiochi, ma con " +
+        "domande sempre diverse), e stavolta gioca TUTTA la sala insieme. Chi pensa di sapere " +
+        "la risposta preme il buzzer per prenotarsi: un pannello laterale mostra l'ordine di " +
+        "chi ha buzzato, e l'host può resettarlo in qualsiasi momento. Una sola domanda, che " +
+        "vale fissa 100 monete: l'host svela la risposta e decide a chi assegnarle (anche a " +
+        "nessuno)."
+      );
     default:
       return (
         "Una ruota deciderà la prova da affrontare qui: rispondi correttamente entro il tempo " +

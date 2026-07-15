@@ -448,6 +448,30 @@ export interface PackOpenedPayload {
   cards: { card: CardDef; capped: boolean }[]; // capped = limite di 5 copie già raggiunto, non aggiunta
 }
 
+// IL GRANDIOSO BUZZ (mondo "cieli"): a differenza di Grandioso Quiz
+// Particolare, qui giocano TUTTI i giocatori insieme, non solo quello di
+// turno. Stessa ruota delle 5 categorie (Animali, Serie TV, Film, Musica,
+// Videogiochi, riusa ParticolareCategoryId/ParticolareMediaPublic perché
+// identiche), ma una sola domanda per round, che vale fissa 100 monete.
+// I giocatori premono il buzzer per prenotarsi (in ordine, tutti visibili in
+// un pannello laterale); l'host può resettare la coda dei buzz in qualsiasi
+// momento, svelare la risposta, e infine assegnare i 100 punti a UNO dei
+// giocatori che hanno buzzato oppure a nessuno.
+export interface BuzzQuestionPayload {
+  categoryId: ParticolareCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  media: ParticolareMediaPublic;
+  revealed: boolean;
+  answer: string | null; // valorizzata solo quando revealed è true
+  buzzOrder: string[]; // playerId in ordine di pressione del buzzer
+}
+
+export interface BuzzEndedPayload {
+  winnerId: string | null; // null = l'host non ha assegnato punti a nessuno
+  coinsAwarded: number;
+}
+
 export type SurpriseEffectCode =
   | "moveForward"
   | "moveBackward"
@@ -543,6 +567,12 @@ export interface ClientToServerEvents {
   "particolare:reveal": () => void;
   "particolare:mediaControl": (payload: ParticolareMediaControlPayload) => void;
   "particolare:resolve": (payload: { coinsAwarded: number }) => void;
+  "buzz:beginGame": () => void;
+  "buzz:press": () => void;
+  "buzz:reset": () => void;
+  "buzz:reveal": () => void;
+  "buzz:mediaControl": (payload: ParticolareMediaControlPayload) => void;
+  "buzz:resolve": (payload: { winnerId: string | null }) => void;
 }
 
 // Eventi server -> client
@@ -621,4 +651,12 @@ export interface ServerToClientEvents {
   "particolare:question": (payload: ParticolareQuestionPayload) => void;
   "particolare:mediaControl": (payload: ParticolareMediaControlPayload) => void;
   "particolare:ended": (payload: ParticolareEndedPayload) => void;
+
+  "buzz:spin": (payload: { durationMs: number }) => void;
+  "buzz:categoryDrawn": (
+    payload: { categoryId: ParticolareCategoryId; categoryName: string; categoryEmoji: string }
+  ) => void;
+  "buzz:question": (payload: BuzzQuestionPayload) => void;
+  "buzz:mediaControl": (payload: ParticolareMediaControlPayload) => void;
+  "buzz:ended": (payload: BuzzEndedPayload) => void;
 }

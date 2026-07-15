@@ -206,6 +206,48 @@ io.on("connection", (socket) => {
     session?.resolveParticolare(loc.playerId, coinsAwarded, io);
   });
 
+  socket.on("buzz:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginBuzzGame(loc.playerId, io);
+  });
+
+  socket.on("buzz:press", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.pressBuzz(loc.playerId, io);
+  });
+
+  socket.on("buzz:reset", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resetBuzz(loc.playerId, io);
+  });
+
+  socket.on("buzz:reveal", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.revealBuzzAnswer(loc.playerId, io);
+  });
+
+  socket.on("buzz:mediaControl", ({ action }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.buzzMediaControl(loc.playerId, action, io);
+  });
+
+  socket.on("buzz:resolve", ({ winnerId }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveBuzz(loc.playerId, winnerId, io);
+  });
+
   socket.on("tct:answer", ({ answerIndex }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

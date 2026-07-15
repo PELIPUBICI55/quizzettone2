@@ -42,6 +42,9 @@ import { DuckGrid } from "./components/DuckGrid";
 import { ParticolareWheel } from "./components/ParticolareWheel";
 import { ParticolareCategoryReveal } from "./components/ParticolareCategoryReveal";
 import { ParticolareGame } from "./components/ParticolareGame";
+import { BuzzWheel } from "./components/BuzzWheel";
+import { BuzzCategoryReveal } from "./components/BuzzCategoryReveal";
+import { BuzzGame } from "./components/BuzzGame";
 import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -59,6 +62,7 @@ import { PartyMenu } from "./components/PartyMenu";
 import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
 import type { ParticolareCategoryId, ParticolareQuestionPayload, ParticolareEndedPayload } from "../shared/types";
+import type { BuzzQuestionPayload, BuzzEndedPayload } from "../shared/types";
 
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
@@ -131,6 +135,16 @@ export default function App() {
     categoryEmoji: string;
   } | null>(null);
   const [particolareQuestion, setParticolareQuestion] = useState<ParticolareQuestionPayload | null>(null);
+  // IL GRANDIOSO BUZZ (mondo "cieli") non ha un "playerId" proprietario dello
+  // schermo, come gli altri minigiochi: gioca tutta la sala insieme, quindi
+  // qui non serve nessun controllo isMine.
+  const [buzzSpinInfo, setBuzzSpinInfo] = useState<{ durationMs: number } | null>(null);
+  const [buzzCategoryInfo, setBuzzCategoryInfo] = useState<{
+    categoryId: ParticolareCategoryId;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
+  const [buzzQuestion, setBuzzQuestion] = useState<BuzzQuestionPayload | null>(null);
   const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
   const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
   const [tctQuestionResultInfo, setTctQuestionResultInfo] =
@@ -178,6 +192,9 @@ export default function App() {
       setParticolareSpinInfo(null);
       setParticolareCategoryInfo(null);
       setParticolareQuestion(null);
+      setBuzzSpinInfo(null);
+      setBuzzCategoryInfo(null);
+      setBuzzQuestion(null);
       setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
@@ -353,6 +370,30 @@ export default function App() {
       setParticolareSpinInfo(null);
       setParticolareCategoryInfo(null);
     };
+    const onBuzzSpin = (p: { durationMs: number }) => {
+      setWelcomeInfo(null);
+      setBuzzSpinInfo(p);
+      setBuzzCategoryInfo(null);
+      setBuzzQuestion(null);
+    };
+    const onBuzzCategory = (p: {
+      categoryId: ParticolareCategoryId;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
+      setBuzzSpinInfo(null);
+      setBuzzCategoryInfo(p);
+      setBuzzQuestion(null);
+    };
+    const onBuzzQuestion = (p: BuzzQuestionPayload) => {
+      setBuzzCategoryInfo(null);
+      setBuzzQuestion(p);
+    };
+    const onBuzzEnded = (_p: BuzzEndedPayload) => {
+      setBuzzQuestion(null);
+      setBuzzSpinInfo(null);
+      setBuzzCategoryInfo(null);
+    };
     const onTctStarted = (p: TctStartedPayload) => {
       setWelcomeInfo(null);
       setTctStartedInfo(p);
@@ -430,6 +471,10 @@ export default function App() {
     socket.on("particolare:categoryDrawn", onParticolareCategory);
     socket.on("particolare:question", onParticolareQuestion);
     socket.on("particolare:ended", onParticolareEnded);
+    socket.on("buzz:spin", onBuzzSpin);
+    socket.on("buzz:categoryDrawn", onBuzzCategory);
+    socket.on("buzz:question", onBuzzQuestion);
+    socket.on("buzz:ended", onBuzzEnded);
     socket.on("tct:started", onTctStarted);
     socket.on("tct:question", onTctQuestion);
     socket.on("tct:questionResult", onTctQuestionResult);
@@ -474,6 +519,10 @@ export default function App() {
       socket.off("particolare:categoryDrawn", onParticolareCategory);
       socket.off("particolare:question", onParticolareQuestion);
       socket.off("particolare:ended", onParticolareEnded);
+      socket.off("buzz:spin", onBuzzSpin);
+      socket.off("buzz:categoryDrawn", onBuzzCategory);
+      socket.off("buzz:question", onBuzzQuestion);
+      socket.off("buzz:ended", onBuzzEnded);
       socket.off("tct:started", onTctStarted);
       socket.off("tct:question", onTctQuestion);
       socket.off("tct:questionResult", onTctQuestionResult);
@@ -741,6 +790,21 @@ export default function App() {
             isHost={state.me.isHost}
             isMine={particolareQuestion.playerId === state.me.id}
             playerName={particolareQuestionPlayer?.name ?? "?"}
+          />
+        ) : buzzSpinInfo ? (
+          <BuzzWheel />
+        ) : buzzCategoryInfo ? (
+          <BuzzCategoryReveal
+            categoryName={buzzCategoryInfo.categoryName}
+            categoryEmoji={buzzCategoryInfo.categoryEmoji}
+            isHost={state.me.isHost}
+          />
+        ) : buzzQuestion ? (
+          <BuzzGame
+            payload={buzzQuestion}
+            isHost={state.me.isHost}
+            myId={state.me.id}
+            players={state.players}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel

@@ -13,6 +13,7 @@ import type {
   PlayerStatus,
   ServerToClientEvents,
   ParticolareCategoryId,
+  BuzzQuestionPayload,
   StatusType,
   SurpriseCardDef,
   Top5CategoryDef,
@@ -44,6 +45,7 @@ import {
   pickRandomParticolareCategory,
   pickRandomParticolareItems,
 } from "../data/particolare.js";
+import { pickRandomBuzzItem } from "../data/buzz.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -153,6 +155,24 @@ interface PendingParticolare {
   revealed: boolean; // true dopo che l'host ha svelato la risposta della domanda corrente
 }
 
+// Stato di IL GRANDIOSO BUZZ (mondo "cieli") in corso: a differenza di
+// GRANDIOSO QUIZ PARTICOLARE gioca TUTTA la sala insieme, non solo il
+// giocatore di turno, quindi questo stato vive a livello di SESSIONE (non su
+// un singolo InternalPlayer). Il giocatore che ha fatto atterrare la pedina
+// su "cieli" (triggeringPlayerId) resta comunque quello a cui, alla fine, si
+// chiude pendingWorldId e si fa avanzare il turno: gli altri partecipano solo
+// premendo il buzzer. Una sola domanda per round, che vale fissa 100 monete.
+interface PendingBuzz {
+  triggeringPlayerId: string;
+  categoryId: ParticolareCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  item: PendingParticolareItem;
+  started: boolean; // true quando l'host ha avviato la domanda vera dopo la schermata di categoria
+  revealed: boolean;
+  buzzOrder: string[]; // playerId in ordine di pressione del buzzer
+}
+
 interface InternalPlayer {
   id: string;
   socketId: string;
@@ -212,6 +232,7 @@ const TCT_REVEAL_DELAY_MS = 3500;
 const TCT_INTRO_DELAY_MS = 2200;
 const OCHO_VALID_REWARDS = [0, 50, 100];
 const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
+const BUZZ_REWARD = 100; // premio fisso: una sola domanda, un solo vincitore (o nessuno)
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -254,6 +275,8 @@ export class GameSession {
   // stesso motivo di playedOchoIds.
   private playedDuckCategoryIds = new Set<string>();
   private playedParticolareItemIds = new Set<string>();
+  private playedBuzzItemIds = new Set<string>();
+  private pendingBuzz: PendingBuzz | null = null;
 
   constructor(code: string) {
     this.code = code;
@@ -485,6 +508,19 @@ export class GameSession {
         "particolare:question",
         this.buildParticolareQuestionPayload(particolarePlayer)
       );
+    }
+
+    // Stessa cosa per IL GRANDIOSO BUZZ (mondo "cieli"): a differenza degli
+    // altri minigiochi lo stato vive a livello di sessione (this.pendingBuzz),
+    // non su un singolo giocatore, perché gioca tutta la sala insieme.
+    if (this.pendingBuzz && !this.pendingBuzz.started) {
+      io.to(player.socketId).emit("buzz:categoryDrawn", {
+        categoryId: this.pendingBuzz.categoryId,
+        categoryName: this.pendingBuzz.categoryName,
+        categoryEmoji: this.pendingBuzz.categoryEmoji,
+      });
+    } else if (this.pendingBuzz?.started) {
+      io.to(player.socketId).emit("buzz:question", this.buildBuzzQuestionPayload());
     }
 
     // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
@@ -1634,6 +1670,14 @@ export class GameSession {
       return;
     }
 
+    // Il mondo "cieli" (IL GRANDIOSO BUZZ) ha una meccanica dedicata: gioca
+    // TUTTA la sala insieme (non solo il giocatore di turno), prenotandosi
+    // la risposta con un buzzer; una sola domanda, che vale fissa 100 monete.
+    if (worldId === "cieli") {
+      this.beginBuzz(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -2476,6 +2520,182 @@ export class GameSession {
 
     io.emit("particolare:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
+    this.broadcastState(io);
+  }
+
+  // Avvia IL GRANDIOSO BUZZ (mondo "cieli"): pesca una categoria a caso fra
+  // le 5 (stesse di Grandioso Quiz Particolare, nessun vincolo di non
+  // ripetizione) e UNA sola domanda al suo interno (mai ripetuta nella
+  // stessa partita, pool dedicato e distinto da quello di Particolare).
+  // A differenza degli altri minigiochi lo stato non vive sull'InternalPlayer
+  // che ha fatto scattare il round, ma sulla sessione: giocano tutti.
+  private beginBuzz(player: InternalPlayer, io: IOServer) {
+    const category = pickRandomParticolareCategory();
+    const rawItem = pickRandomBuzzItem(category.id, this.playedBuzzItemIds);
+    this.playedBuzzItemIds.add(rawItem.id);
+
+    const item: PendingParticolareItem =
+      "videoId" in rawItem
+        ? { id: rawItem.id, answer: rawItem.answer, media: { kind: "youtube", videoId: rawItem.videoId } }
+        : {
+            id: rawItem.id,
+            answer: rawItem.answer,
+            media: { kind: "image", detailUrl: rawItem.detailUrl, fullUrl: rawItem.fullUrl },
+          };
+
+    this.pendingBuzz = {
+      triggeringPlayerId: player.id,
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryEmoji: category.emoji,
+      item,
+      started: false,
+      revealed: false,
+      buzzOrder: [],
+    };
+
+    const durationMs = 2600;
+    io.emit("buzz:spin", { durationMs });
+
+    setTimeout(() => {
+      if (
+        !this.pendingBuzz ||
+        this.pendingBuzz.categoryId !== category.id ||
+        this.pendingBuzz.triggeringPlayerId !== player.id
+      ) {
+        return;
+      }
+      io.emit("buzz:categoryDrawn", {
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Solo l'host avvia la domanda vera dopo la schermata di categoria: qui
+  // non è il giocatore di turno a dover confermare (come in Particolare),
+  // perché il round coinvolge tutta la sala.
+  beginBuzzGame(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!this.pendingBuzz || this.pendingBuzz.started) return;
+    this.pendingBuzz.started = true;
+    this.broadcastBuzzQuestion(io);
+  }
+
+  // Costruisce il payload della domanda corrente: stessa logica di
+  // Particolare (detailUrl sempre, fullUrl solo se rivelata; videoId sempre
+  // incluso, nascosto visivamente lato client se non si è l'host), più
+  // l'elenco ordinato di chi ha buzzato finora.
+  private buildBuzzQuestionPayload(): BuzzQuestionPayload {
+    const b = this.pendingBuzz!;
+    const media =
+      b.item.media.kind === "image"
+        ? { kind: "image" as const, detailUrl: b.item.media.detailUrl, fullUrl: b.revealed ? b.item.media.fullUrl : undefined }
+        : { kind: "youtube" as const, videoId: b.item.media.videoId };
+
+    return {
+      categoryId: b.categoryId,
+      categoryName: b.categoryName,
+      categoryEmoji: b.categoryEmoji,
+      media,
+      revealed: b.revealed,
+      answer: b.revealed ? b.item.answer : null,
+      buzzOrder: b.buzzOrder,
+    };
+  }
+
+  private broadcastBuzzQuestion(io: IOServer) {
+    if (!this.pendingBuzz) return;
+    io.emit("buzz:question", this.buildBuzzQuestionPayload());
+  }
+
+  // Qualsiasi giocatore (host incluso, dato che partecipa anche lui alla
+  // partita) può prenotarsi: si aggiunge in coda solo se non ha già buzzato
+  // in questo round e solo mentre la domanda è attiva e non ancora svelata.
+  pressBuzz(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (!this.pendingBuzz || !this.pendingBuzz.started || this.pendingBuzz.revealed) return;
+    if (this.pendingBuzz.buzzOrder.includes(playerId)) return;
+    this.pendingBuzz.buzzOrder.push(playerId);
+    this.broadcastBuzzQuestion(io);
+  }
+
+  // Solo l'host può azzerare la coda dei buzz (es. se chi ha risposto per
+  // primo ha sbagliato a voce e si vuole riaprire la prenotazione a tutti,
+  // compreso chi aveva già buzzato).
+  resetBuzz(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!this.pendingBuzz) return;
+    this.pendingBuzz.buzzOrder = [];
+    this.broadcastBuzzQuestion(io);
+  }
+
+  // Solo l'host può svelare la risposta corretta (dopo che qualcuno ha
+  // risposto a voce). Per le categorie a immagine mostra anche la foto
+  // intera oltre al dettaglio.
+  revealBuzzAnswer(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!this.pendingBuzz) return;
+    this.pendingBuzz.revealed = true;
+    this.broadcastBuzzQuestion(io);
+  }
+
+  // Stesso pattern di Particolare per le categorie YouTube: l'host preme
+  // play/pausa/riavvolgi sul proprio player, ribroadcastato a tutti così che
+  // il player nascosto (ma presente) di ogni client resti sincronizzato.
+  buzzMediaControl(hostId: string, action: "play" | "pause" | "rewind", io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!this.pendingBuzz) return;
+    io.emit("buzz:mediaControl", { action });
+  }
+
+  // Solo l'host decreta chi ha risposto correttamente per primo (o nessuno):
+  // il premio è fisso a 100 monete (moltiplicato/dimezzato dagli status del
+  // VINCITORE, non del giocatore di turno). Il giocatore che aveva fatto
+  // scattare il round chiude comunque il proprio turno normalmente.
+  resolveBuzz(hostId: string, winnerId: string | null, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    if (!this.pendingBuzz) return;
+    const triggeringPlayer = this.players.get(this.pendingBuzz.triggeringPlayerId);
+    if (!triggeringPlayer) return;
+
+    let finalCoins = 0;
+    if (winnerId) {
+      const winner = this.players.get(winnerId);
+      if (winner) {
+        finalCoins = BUZZ_REWARD;
+        const doubleIdx = winner.statuses.findIndex((s) => s.type === "doubleWin");
+        if (doubleIdx !== -1) {
+          finalCoins *= 2;
+          winner.statuses.splice(doubleIdx, 1);
+        }
+        const tripleIdx = winner.statuses.findIndex((s) => s.type === "tripleWin");
+        if (tripleIdx !== -1) {
+          finalCoins *= 3;
+          winner.statuses.splice(tripleIdx, 1);
+        }
+        const halveIdx = winner.statuses.findIndex((s) => s.type === "halveWin");
+        if (halveIdx !== -1) {
+          finalCoins = Math.floor(finalCoins / 2);
+          winner.statuses.splice(halveIdx, 1);
+        }
+        winner.coins += finalCoins;
+      }
+    }
+
+    this.pendingBuzz = null;
+    this.applyPassiveCardEffects(triggeringPlayer);
+    triggeringPlayer.pendingWorldId = null;
+
+    io.emit("buzz:ended", { winnerId, coinsAwarded: finalCoins });
+    this.maybeAdvanceTurn(triggeringPlayer, io);
     this.broadcastState(io);
   }
 
