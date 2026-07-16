@@ -429,3 +429,23 @@ export function pickRandomSfidaGinoCapital(excludedIds: ReadonlySet<string>): Sf
   if (candidates.length === 0) candidates = SFIDA_GINO_CAPITALS;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
+
+// SFIDA GINO si gioca al meglio di 3: servono `count` bandiere/capitali
+// distinti tra loro (oltre che, quando possibile, distinti da quelli già
+// usati in partita). Se il pool escluso non basta per `count` elementi
+// diversi, si ripiega sull'intero pool (stesso fallback delle funzioni
+// singole già esistenti).
+export function pickRandomSfidaGinoFlags(count: number, excludedIds: ReadonlySet<string>): SfidaGinoFlagItem[] {
+  let candidates = SFIDA_GINO_FLAGS.filter((f) => !excludedIds.has(f.id));
+  if (candidates.length < count) candidates = SFIDA_GINO_FLAGS;
+  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+export function pickRandomSfidaGinoCapitals(count: number, excludedIds: ReadonlySet<string>): SfidaGinoCapitalItem[] {
+  if (SFIDA_GINO_CAPITALS.length === 0) return [];
+  let candidates = SFIDA_GINO_CAPITALS.filter((c) => !excludedIds.has(c.id));
+  if (candidates.length < count) candidates = SFIDA_GINO_CAPITALS;
+  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}

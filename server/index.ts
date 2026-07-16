@@ -262,6 +262,13 @@ io.on("connection", (socket) => {
     session?.revealSfidaGinoAnswer(loc.playerId, io);
   });
 
+  socket.on("sfidaGino:nextQuestion", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.nextSfidaGinoQuestion(loc.playerId, io);
+  });
+
   socket.on("sfidaGino:resolve", ({ coinsAwarded }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

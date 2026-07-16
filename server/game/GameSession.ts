@@ -51,8 +51,8 @@ import {
 import { pickRandomBuzzItem } from "../data/buzz.js";
 import {
   pickRandomSfidaGinoCategory,
-  pickRandomSfidaGinoFlag,
-  pickRandomSfidaGinoCapital,
+  pickRandomSfidaGinoFlags,
+  pickRandomSfidaGinoCapitals,
 } from "../data/sfidaGino.js";
 import { SFIDA_GINO_CATEGORIES } from "../../shared/sfidaGinoCategories.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
@@ -182,19 +182,26 @@ interface PendingBuzz {
   buzzOrder: string[]; // playerId in ordine di pressione del buzzer
 }
 
+interface PendingSfidaGinoRound {
+  itemId: string; // per l'esclusione, non ripetere lo stesso stato nella stessa partita
+  prompt: SfidaGinoPrompt;
+  answer: string;
+}
+
 // Stato di un round di SFIDA GINO (mondo "rovine") in corso. Gioca solo il
 // giocatore di turno, a voce, come in Grandioso Quiz Particolare: una ruota
 // estrae una fra 2 categorie (Indovina la Capitale / Indovina la Bandiera),
-// poi una sola domanda al suo interno. Premio fisso e binario: 2000 monete
-// oppure 0, deciso dall'host dopo la risposta a voce.
+// poi si gioca AL MEGLIO DI 3 domande all'interno di quella stessa categoria
+// (stesso pattern di questionIndex/revealed di Particolare, ma con 3 item
+// invece di 2). Premio fisso e binario: 2000 monete oppure 0, deciso
+// dall'host solo alla fine, in base a quante ne ha indovinate a voce.
 interface PendingSfidaGino {
   categoryId: SfidaGinoCategoryId;
   categoryName: string;
   categoryEmoji: string;
-  itemId: string; // per l'esclusione, non ripetere lo stesso stato nella stessa partita
-  prompt: SfidaGinoPrompt;
-  answer: string;
-  revealed: boolean;
+  rounds: PendingSfidaGinoRound[]; // esattamente 3
+  questionIndex: number; // 0, 1 oppure 2
+  revealed: boolean; // true dopo che l'host ha svelato la risposta della domanda corrente
 }
 
 interface InternalPlayer {
@@ -2757,57 +2764,62 @@ export class GameSession {
   }
 
   // Avvia SFIDA GINO (mondo "rovine"): pesca una fra le 2 categorie
-  // (Indovina la Capitale / Indovina la Bandiera) e una sola domanda al suo
-  // interno, mai ripetuta nella stessa partita. Se la categoria pescata è
-  // "capitali" ma il dataset non è ancora stato fornito (in attesa del file
-  // dell'utente), ripiega su "bandiere" così il mondo resta comunque
-  // giocabile nel frattempo.
+  // (Indovina la Capitale / Indovina la Bandiera) e si gioca AL MEGLIO DI 3
+  // domande all'interno di quella stessa categoria, mai ripetute nella stessa
+  // partita. Se la categoria pescata è "capitali" ma il dataset non è
+  // ancora stato popolato, ripiega su "bandiere" così il mondo resta
+  // comunque giocabile nel frattempo.
   private beginSfidaGino(player: InternalPlayer, io: IOServer) {
     let category = pickRandomSfidaGinoCategory();
+    const ROUND_COUNT = 3;
 
-    let prompt: SfidaGinoPrompt;
-    let answer: string;
-    let itemId: string;
+    let rounds: PendingSfidaGinoRound[];
 
     if (category.id === "capitali") {
-      const capital = pickRandomSfidaGinoCapital(this.playedSfidaGinoCapitalIds);
-      if (capital) {
-        this.playedSfidaGinoCapitalIds.add(capital.id);
-        prompt = { kind: "text", text: capital.question };
-        answer = capital.answer;
-        itemId = capital.id;
+      const capitals = pickRandomSfidaGinoCapitals(ROUND_COUNT, this.playedSfidaGinoCapitalIds);
+      if (capitals.length > 0) {
+        for (const c of capitals) this.playedSfidaGinoCapitalIds.add(c.id);
+        rounds = capitals.map((c) => ({
+          itemId: c.id,
+          prompt: { kind: "text", text: c.question },
+          answer: c.answer,
+        }));
       } else {
-        // Dataset capitali non ancora popolato: ripiega su bandiere.
+        // Dataset capitali vuoto: ripiega su bandiere.
         category = SFIDA_GINO_CATEGORIES.find((c) => c.id === "bandiere")!;
-        const flag = pickRandomSfidaGinoFlag(this.playedSfidaGinoFlagIds);
-        this.playedSfidaGinoFlagIds.add(flag.id);
-        prompt = { kind: "image", imageUrl: flag.imageUrl };
-        answer = flag.answer;
-        itemId = flag.id;
+        const flags = pickRandomSfidaGinoFlags(ROUND_COUNT, this.playedSfidaGinoFlagIds);
+        for (const f of flags) this.playedSfidaGinoFlagIds.add(f.id);
+        rounds = flags.map((f) => ({
+          itemId: f.id,
+          prompt: { kind: "image", imageUrl: f.imageUrl },
+          answer: f.answer,
+        }));
       }
     } else {
-      const flag = pickRandomSfidaGinoFlag(this.playedSfidaGinoFlagIds);
-      this.playedSfidaGinoFlagIds.add(flag.id);
-      prompt = { kind: "image", imageUrl: flag.imageUrl };
-      answer = flag.answer;
-      itemId = flag.id;
+      const flags = pickRandomSfidaGinoFlags(ROUND_COUNT, this.playedSfidaGinoFlagIds);
+      for (const f of flags) this.playedSfidaGinoFlagIds.add(f.id);
+      rounds = flags.map((f) => ({
+        itemId: f.id,
+        prompt: { kind: "image", imageUrl: f.imageUrl },
+        answer: f.answer,
+      }));
     }
 
-    player.pendingSfidaGino = {
+    const pending: PendingSfidaGino = {
       categoryId: category.id,
       categoryName: category.name,
       categoryEmoji: category.emoji,
-      itemId,
-      prompt,
-      answer,
+      rounds,
+      questionIndex: 0,
       revealed: false,
     };
+    player.pendingSfidaGino = pending;
 
     const durationMs = 2600;
     io.emit("sfidaGino:spin", { playerId: player.id, durationMs });
 
     setTimeout(() => {
-      if (!player.pendingSfidaGino || player.pendingSfidaGino.itemId !== itemId) return;
+      if (player.pendingSfidaGino !== pending) return;
       player.awaitingSfidaGinoStart = true;
       io.emit("sfidaGino:categoryDrawn", {
         playerId: player.id,
@@ -2833,14 +2845,17 @@ export class GameSession {
 
   private buildSfidaGinoQuestionPayload(player: InternalPlayer): SfidaGinoQuestionPayload {
     const p = player.pendingSfidaGino!;
+    const round = p.rounds[p.questionIndex];
     return {
       playerId: player.id,
       categoryId: p.categoryId,
       categoryName: p.categoryName,
       categoryEmoji: p.categoryEmoji,
-      prompt: p.prompt,
+      questionIndex: p.questionIndex,
+      totalQuestions: p.rounds.length,
+      prompt: round.prompt,
       revealed: p.revealed,
-      answer: p.revealed ? p.answer : null,
+      answer: p.revealed ? round.answer : null,
     };
   }
 
@@ -2849,8 +2864,24 @@ export class GameSession {
     io.emit("sfidaGino:question", this.buildSfidaGinoQuestionPayload(player));
   }
 
-  // Solo l'host può svelare la risposta corretta (dopo che il giocatore di
-  // turno ha risposto a voce).
+  // Solo l'host può passare alla domanda successiva (dopo che il giocatore
+  // di turno ha risposto a voce alla domanda corrente). Si gioca al meglio
+  // di 3: si avanza fino alla terza, poi l'host assegna 2000 o 0 in base a
+  // quante ne ha indovinate.
+  nextSfidaGinoQuestion(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingSfidaGino);
+    if (!target?.pendingSfidaGino) return;
+    const p = target.pendingSfidaGino;
+    if (p.questionIndex >= p.rounds.length - 1) return;
+    p.questionIndex += 1;
+    p.revealed = false;
+    this.broadcastSfidaGinoQuestion(target, io);
+  }
+
+  // Solo l'host può svelare la risposta corretta della domanda corrente
+  // (dopo che il giocatore di turno ha risposto a voce).
   revealSfidaGinoAnswer(hostId: string, io: IOServer) {
     const host = this.players.get(hostId);
     if (!host?.isHost) return;
@@ -2860,9 +2891,10 @@ export class GameSession {
     this.broadcastSfidaGinoQuestion(target, io);
   }
 
-  // Solo l'host decreta il premio: 2000 monete o 0, binario (nessuna via di
-  // mezzo, a differenza di Ocho/Particolare/Duck). Stessi moltiplicatori di
-  // stato degli altri minigiochi.
+  // Solo l'host decreta il premio finale per l'intero minigioco (al meglio
+  // di 3): 2000 monete o 0, binario (nessuna via di mezzo, a differenza di
+  // Ocho/Particolare/Duck). Stessi moltiplicatori di stato degli altri
+  // minigiochi.
   resolveSfidaGino(hostId: string, coinsAwarded: number, io: IOServer) {
     const host = this.players.get(hostId);
     if (!host?.isHost) return;

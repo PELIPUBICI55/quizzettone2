@@ -497,6 +497,8 @@ export interface SfidaGinoQuestionPayload {
   categoryId: SfidaGinoCategoryId;
   categoryName: string;
   categoryEmoji: string;
+  questionIndex: number; // 0, 1 oppure 2
+  totalQuestions: number; // sempre 3 (si gioca al meglio di 3)
   prompt: SfidaGinoPrompt;
   revealed: boolean;
   answer: string | null; // valorizzata solo quando revealed è true
@@ -610,6 +612,7 @@ export interface ClientToServerEvents {
   "buzz:resolve": (payload: { winnerId: string | null }) => void;
   "sfidaGino:beginGame": () => void;
   "sfidaGino:reveal": () => void;
+  "sfidaGino:nextQuestion": () => void;
   "sfidaGino:resolve": (payload: { coinsAwarded: number }) => void;
 }
 

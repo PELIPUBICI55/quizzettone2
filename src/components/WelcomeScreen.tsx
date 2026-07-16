@@ -70,9 +70,9 @@ function worldDescription(worldId: string | undefined): string {
     case "rovine":
       return (
         "Qui si gioca a Sfida Gino: la ruota estrae una fra 2 categorie (Indovina la Capitale, " +
-        "Indovina la Bandiera) e gioca solo il giocatore di turno, che risponde A VOCE a una " +
-        "sola domanda. L'host svela la risposta e assegna il premio, fisso e secco: 2000 monete " +
-        "oppure 0, senza vie di mezzo."
+        "Indovina la Bandiera) e gioca solo il giocatore di turno, che risponde A VOCE al meglio " +
+        "di 3 domande nella stessa categoria. L'host svela la risposta dopo ognuna e, alla fine, " +
+        "assegna il premio, fisso e secco: 2000 monete oppure 0, senza vie di mezzo."
       );
     default:
       return (

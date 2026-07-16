@@ -9,9 +9,12 @@ interface Props {
 }
 
 // SFIDA GINO: gioca solo il giocatore di turno, a voce, come in Grandioso
-// Quiz Particolare, ma con una sola domanda e un premio fisso e binario
-// (2000 monete o 0, deciso dall'host).
+// Quiz Particolare, ma al MEGLIO DI 3 domande (stessa categoria per tutte e
+// 3) e un premio finale fisso e binario (2000 monete o 0, deciso dall'host
+// solo alla fine, in base a quante ne ha indovinate).
 export function SfidaGinoGame({ payload, isHost, isMine, playerName }: Props) {
+  const isLastQuestion = payload.questionIndex >= payload.totalQuestions - 1;
+
   return (
     <div className="wheel-wrap">
       <div className="ocho-title-panel">
@@ -21,8 +24,9 @@ export function SfidaGinoGame({ payload, isHost, isMine, playerName }: Props) {
       </div>
 
       <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
+        Domanda {payload.questionIndex + 1} di {payload.totalQuestions} —{" "}
         {isMine ? (
-          "Rispondi a voce!"
+          "rispondi a voce!"
         ) : (
           <>
             <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong> risponde a voce...
@@ -53,14 +57,22 @@ export function SfidaGinoGame({ payload, isHost, isMine, playerName }: Props) {
 
       {isHost ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", alignItems: "center" }}>
-          {!payload.revealed && (
-            <button className="btn-outline" onClick={() => socket.emit("sfidaGino:reveal")}>
-              Svela risposta
-            </button>
-          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", justifyContent: "center" }}>
+            {!payload.revealed && (
+              <button className="btn-outline" onClick={() => socket.emit("sfidaGino:reveal")}>
+                Svela risposta
+              </button>
+            )}
+            {!isLastQuestion && (
+              <button className="btn-outline" onClick={() => socket.emit("sfidaGino:nextQuestion")}>
+                Prossima domanda
+              </button>
+            )}
+          </div>
           <div style={{ textAlign: "center" }}>
             <p style={{ color: "var(--cream)", marginBottom: "0.6rem" }}>
-              Quante monete assegni a <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong>?
+              Al meglio di 3, quante ne ha indovinate{" "}
+              <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong>? Assegna 2000 monete oppure 0:
             </p>
             <div style={{ display: "flex", gap: "0.8rem", justifyContent: "center" }}>
               <button
