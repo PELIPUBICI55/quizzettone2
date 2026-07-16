@@ -1,4 +1,5 @@
 import type { GameEndedPayload, GameStateSnapshot } from "../../shared/types";
+import { RevealedCollectionMenu } from "../components/RevealedCollectionMenu";
 
 interface Props {
   state: GameStateSnapshot;
@@ -14,15 +15,21 @@ export function GameEndedScreen({ state, payload }: Props) {
     state.players.find((p) => p.id === playerId)?.name ?? "?";
 
   const winnerNames = payload.winnerIds.map(nameFor);
+  const isCollectionWin = payload.reason === "collectionComplete";
 
   return (
     <div className="join-screen">
       <div className="join-panel panel" style={{ maxWidth: 560 }}>
-        <h1 style={{ fontSize: "2.2rem", textAlign: "center" }}>🏆 Partita conclusa!</h1>
+        <h1 style={{ fontSize: "2.2rem", textAlign: "center" }}>
+          {isCollectionWin ? "🎴 Collezione completata!" : "🏆 Partita conclusa!"}
+        </h1>
 
         <p className="subtitle" style={{ textAlign: "center" }}>
-          Tutti i mondi hanno esaurito le domande: dopo l'ultimo giro di shopping alla Cittadella,
-          la partita è finita.
+          {isCollectionWin
+            ? `${winnerNames.join(", ")} ${
+                winnerNames.length > 1 ? "hanno" : "ha"
+              } completato l'intera collezione di figurine: la partita finisce qui.`
+            : "Tutti i mondi hanno esaurito le domande: dopo l'ultimo giro di shopping alla Cittadella, la partita è finita."}
         </p>
 
         <div
@@ -35,6 +42,10 @@ export function GameEndedScreen({ state, payload }: Props) {
           <p style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--gold-soft)" }}>
             {winnerNames.join(", ")}
           </p>
+        </div>
+
+        <div style={{ margin: "0 0 1.2rem" }}>
+          <RevealedCollectionMenu state={state} />
         </div>
 
         <h3 className="section-title" style={{ textAlign: "left" }}>

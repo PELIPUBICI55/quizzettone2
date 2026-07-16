@@ -57,7 +57,7 @@ export function CollectionMenu({ state }: Props) {
               <div className="card-grid">
                 {foundCards.map((card) => {
                   const isSpent = (availableCounts.get(card.id) ?? 0) === 0;
-                  const canQuickUse = card.effect.isQuickEffect && !isSpent;
+                  const canQuickUse = !!card.effect?.isQuickEffect && !isSpent;
                   return (
                     <CardView
                       key={card.id}

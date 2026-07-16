@@ -7,7 +7,12 @@ interface Props {
   state: GameStateSnapshot;
 }
 
-export function FullCollectionMenu({ state }: Props) {
+// Usato solo nelle schermate di fine partita (sia per esaurimento mondi, sia
+// per collezione completata): mostra l'intero catalogo delle figurine,
+// incluse quelle mai trovate e la 26esima segreta, completamente sbloccato
+// per qualsiasi giocatore. A partita finita non ha più senso nascondere
+// nulla: è il "reveal" completo della collezione.
+export function RevealedCollectionMenu({ state }: Props) {
   const [open, setOpen] = useState(false);
   const [zoomedCard, setZoomedCard] = useState<CardDef | null>(null);
 
@@ -16,19 +21,12 @@ export function FullCollectionMenu({ state }: Props) {
     ownedCounts.set(owned.cardId, (ownedCounts.get(owned.cardId) ?? 0) + 1);
   }
 
-  // la figurina segreta non compare mai qui finché non viene trovata: niente
-  // slot "oscurato" che ne riveli l'esistenza in anticipo
-  const visibleCards = state.cardCatalog.filter(
-    (c) => c.rarity !== "segreta" || ownedCounts.has(c.id)
-  );
-
-  const total = visibleCards.length;
-  const foundCount = visibleCards.filter((c) => ownedCounts.has(c.id)).length;
+  const total = state.cardCatalog.length;
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
       <button className="btn-outline" onClick={() => setOpen((o) => !o)}>
-        📖 Collezione completa ({foundCount}/{total})
+        🎴 Svela la collezione completa ({total})
       </button>
 
       {open && (
@@ -39,32 +37,28 @@ export function FullCollectionMenu({ state }: Props) {
             style={{
               position: "absolute",
               top: "calc(100% + 0.5rem)",
-              right: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
               zIndex: 60,
               width: "min(90vw, 460px)",
               maxHeight: "70vh",
               overflowY: "auto",
             }}
           >
-            <h3 style={{ marginTop: 0 }}>
-              Collezione completa — {foundCount}/{total}
-            </h3>
+            <h3 style={{ marginTop: 0 }}>Tutte le figurine — {total}</h3>
             <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "-0.5rem" }}>
-              Le figurine che ti mancano sono oscurate.
+              La partita è finita: ecco l'intera collezione, segreta compresa.
             </p>
             <div className="card-grid">
-              {visibleCards.map((card) => {
-                const locked = !ownedCounts.has(card.id);
-                return (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    ownedCount={ownedCounts.get(card.id) ?? 0}
-                    locked={locked}
-                    onClick={() => setZoomedCard(card)}
-                  />
-                );
-              })}
+              {state.cardCatalog.map((card) => (
+                <CardView
+                  key={card.id}
+                  card={card}
+                  ownedCount={ownedCounts.get(card.id) ?? 0}
+                  locked={false}
+                  onClick={() => setZoomedCard(card)}
+                />
+              ))}
             </div>
           </div>
         </>
@@ -74,7 +68,7 @@ export function FullCollectionMenu({ state }: Props) {
         <CardZoomModal
           card={zoomedCard}
           ownedCount={ownedCounts.get(zoomedCard.id) ?? 0}
-          locked={!ownedCounts.has(zoomedCard.id)}
+          locked={false}
           onClose={() => setZoomedCard(null)}
         />
       )}

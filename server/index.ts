@@ -51,6 +51,13 @@ io.on("connection", (socket) => {
     session?.chooseToken(loc.playerId, token, io);
   });
 
+  socket.on("party:setSpectator", ({ spectator }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.setSpectator(loc.playerId, spectator, io);
+  });
+
   socket.on("party:start", () => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;
@@ -358,6 +365,13 @@ io.on("connection", (socket) => {
     if (!loc) return;
     const session = parties.get(loc.code);
     session?.leaveShop(loc.playerId, io);
+  });
+
+  socket.on("game:save", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.saveGame(loc.playerId, io);
   });
 
   socket.on("disconnect", () => {

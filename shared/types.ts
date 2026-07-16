@@ -61,17 +61,19 @@ export interface CardEffectDef {
   isPassive?: boolean; // se true: sempre attivo finche possiedi la carta, non va "usata"
 }
 
-export type CardRarity = "comune" | "rara" | "epica" | "leggendaria";
+// "segreta" è una rarità speciale: una sola figurina in tutto il gioco (la
+// 26esima), non legata a nessun mondo, che non compare mai nella collezione
+// completa finché non viene trovata.
+export type CardRarity = "comune" | "rara" | "epica" | "leggendaria" | "segreta";
 
 export interface CardDef {
   id: string;
   name: string;
-  worldId: WorldId; // mondo/tema di appartenenza (influenza grafica e drop rate)
   rarity: CardRarity;
   emoji: string;
   image?: string; // percorso di un'illustrazione vera, se presente (altrimenti si usa emoji)
   description: string; // testo narrativo mostrato sulla carta, sopra l'effetto
-  effect: CardEffectDef;
+  effect?: CardEffectDef; // assente per le figurine puramente da collezione (es. la segreta)
 }
 
 export interface PackDef {
@@ -124,6 +126,11 @@ export interface PlayerSummary {
   activeEffects: CardEffectType[]; // effetti carta già armati, pronti da usare
   statuses: PlayerStatus[]; // impalcatura generica per i futuri "status" di gioco
   cardCount: number; // quante carte possiede in totale (visibile agli altri, non quali)
+  // Solo l'host può attivarla, e solo nella schermata di scelta pedine
+  // (prima di avviare la partita): niente pedina, niente turni, niente
+  // figurine/monete/vittoria. Serve per gestire il gioco "da fuori" senza
+  // parteciparvi attivamente.
+  isSpectator: boolean;
 }
 
 export interface MyState extends PlayerSummary {
@@ -530,6 +537,12 @@ export interface GameEndedPayload {
   standings: GameEndedStandingEntry[];
   winnerIds: string[]; // più di uno solo in caso di parità totale su tutti e 3 i criteri
   totalCardCount: number; // CARD_CATALOG.length, per mostrare "23/25"
+  // "worldsExhausted": vittoria decretata a fine partita normale (tutti i
+  // mondi esauriti + giro finale di shopping), coi 3 criteri di parimerito.
+  // "collectionComplete": un giocatore ha completato l'intera collezione (25
+  // figurine normali, la segreta non è richiesta) durante il gioco normale:
+  // la partita finisce all'istante, senza giro finale né parimerito.
+  reason: "worldsExhausted" | "collectionComplete";
 }
 
 export type SurpriseEffectCode =
@@ -593,6 +606,10 @@ export interface ClientToServerEvents {
   "party:kick": (payload: { playerId: string }) => void;
   "party:setCoins": (payload: { playerId: string; amount: number }) => void;
   "party:chooseToken": (payload: { token: PawnToken }) => void;
+  // Solo l'host, solo nella lobby (prima di avviare la partita): passa tra
+  // "giocatore" e "spettatore". Da spettatore non sceglie pedina, non entra
+  // nell'ordine dei turni e non partecipa alla partita.
+  "party:setSpectator": (payload: { spectator: boolean }) => void;
   "board:roll": () => void;
   "board:confirmMove": (payload: { direction?: string }) => void;
   "quiz:answer": (payload: {
@@ -600,6 +617,11 @@ export interface ClientToServerEvents {
     answerIndex: number | null;
   }) => void;
   "card:use": (payload: { cardId: string }) => void;
+  // Salva la partita su disco lato server così può essere ripresa più tardi
+  // ricollegandosi con lo stesso codice stanza (anche dopo un riavvio del
+  // server). Qualsiasi minigioco in corso per qualunque giocatore viene
+  // annullato: tutti si ritrovano sulla mappa pronti per il turno successivo.
+  "game:save": () => void;
   "shop:buyPack": (payload: { packId: string }) => void;
   "shop:leave": () => void;
   "board:beginMinigame": () => void;
@@ -731,4 +753,9 @@ export interface ServerToClientEvents {
   "sfidaGino:question": (payload: SfidaGinoQuestionPayload) => void;
   "sfidaGino:ended": (payload: SfidaGinoEndedPayload) => void;
   "game:ended": (payload: GameEndedPayload) => void;
+  // Salvataggio completato (vedi GameSession.saveGame): il client ricarica
+  // la pagina poco dopo, così ogni schermata di minigioco eventualmente
+  // rimasta aperta si azzera e si riparte puliti dalla mappa. Ci si
+  // ricollega poi normalmente con lo stesso codice stanza.
+  "game:saved": () => void;
 }

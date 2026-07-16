@@ -1,5 +1,4 @@
 import type { CardDef, CardEffectDef, CardRarity } from "../../shared/types.js";
-import { WORLDS } from "./worlds.js";
 
 // Numero massimo di copie possedibili per ogni singola figurina.
 export const MAX_CARD_COPIES = 5;
@@ -22,22 +21,18 @@ const RARITY_PLAN: { rarity: CardRarity; count: number }[] = [
 
 export const CARD_CATALOG: CardDef[] = (() => {
   const list: CardDef[] = [];
-  const perWorldCount: Record<string, number> = {};
   let globalIndex = 0;
 
   for (const { rarity, count } of RARITY_PLAN) {
     for (let i = 0; i < count; i++) {
-      const world = WORLDS[globalIndex % WORLDS.length];
       const effect = EFFECTS[globalIndex % EFFECTS.length];
-      const n = (perWorldCount[world.id] = (perWorldCount[world.id] ?? 0) + 1);
       list.push({
         id: `card-${globalIndex + 1}`,
-        name: `Talismano di ${world.name} ${n}`,
-        worldId: world.id,
+        name: `Figurina misteriosa ${globalIndex + 1}`,
         rarity,
-        emoji: world.emoji,
+        emoji: "🃏",
         // testo placeholder: verrà personalizzato in seguito carta per carta
-        description: `Un manufatto legato al mondo di ${world.name}, la cui origine resta ancora un mistero.`,
+        description: "Un manufatto la cui origine resta ancora un mistero.",
         effect,
       });
       globalIndex++;
@@ -327,7 +322,25 @@ export const CARD_CATALOG: CardDef[] = (() => {
     },
   };
 
-  return list.map((card) => (OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card));
+  const withOverrides = list.map((card) =>
+    OVERRIDES[card.id] ? { ...card, ...OVERRIDES[card.id] } : card
+  );
+
+  // 26esima figurina: rarità speciale "segreta", unica nel suo genere. Non fa
+  // parte del RARITY_PLAN (non è generata dal round-robin qui sopra) e non ha
+  // nessun effetto di gioco: vale solo come pezzo raro da collezione. Non
+  // compare mai nella "Collezione completa" finché non viene trovata (vedi
+  // FullCollectionMenu.tsx).
+  withOverrides.push({
+    id: "card-26",
+    name: "IL GOAT",
+    rarity: "segreta",
+    emoji: "🐐",
+    image: "/cards/il-goat.webp",
+    description: "Semplicemente il migliore in tutto, soprattutto nei noleggi con conducente.",
+  });
+
+  return withOverrides;
 })();
 
 // Probabilità di estrazione per OGNI singola carta pescata da un pacchetto:

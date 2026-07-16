@@ -59,6 +59,7 @@ import {
   isSfidaGinoWorldExhausted,
 } from "../data/sfidaGino.js";
 import { BOARD_EDGES, edgeById, neighborsOf, availableNeighborsOf, absoluteTileIndex } from "../../shared/board.js";
+import { writeSave, deleteSave } from "./saveStore.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -215,6 +216,10 @@ interface InternalPlayer {
   token: PawnToken | null;
   name: string;
   isHost: boolean;
+  // Solo l'host può attivarla (vedi GameSession.setSpectator), solo nella
+  // lobby: niente pedina, esclus* dall'ordine dei turni, dalla partita vera
+  // e propria e dalla classifica finale. Gestisce il gioco senza giocarci.
+  isSpectator: boolean;
   coins: number;
   boardPosition: BoardPosition;
   pendingRoll: number | null;
@@ -255,6 +260,52 @@ interface InternalPlayer {
   awaitingParticolareStart: boolean; // sulla schermata di conferma categoria, in attesa che il giocatore di turno clicchi "Ok iniziamo"
   pendingSfidaGino: PendingSfidaGino | null;
   awaitingSfidaGinoStart: boolean; // sulla schermata di conferma categoria, in attesa che il giocatore di turno clicchi "Ok iniziamo"
+}
+
+// Formato salvato su disco da GameSession.saveGame (vedi anche
+// GameSession.serialize/deserialize più sotto). Contiene solo progressi
+// "permanenti": monete, figurine, posizione sul tabellone, mondi esauriti,
+// turni. Qualsiasi minigioco/scelta in corso NON viene mai salvato: prima di
+// scrivere su disco, saveGame riporta tutti i giocatori a uno stato
+// "neutro", pronti per il turno successivo (vedi commento su saveGame).
+interface SerializedPlayer {
+  id: string;
+  clientId: string;
+  token: PawnToken | null;
+  name: string;
+  isHost: boolean;
+  isSpectator: boolean;
+  coins: number;
+  boardPosition: BoardPosition;
+  collection: OwnedCard[];
+  activeEffects: CardEffectType[];
+  statuses: PlayerStatus[];
+  caroAmicoSelfId: string | null;
+  forcedNextCategory: string | null;
+  bonusRolls: number;
+  cardsUsedThisTurn: string[];
+}
+
+export interface SerializedGameSession {
+  code: string;
+  turnOrder: string[];
+  currentTurnIndex: number;
+  phase: "lobby" | "playing" | "finalRound" | "ended";
+  players: SerializedPlayer[];
+  playedTop5Ids: string[];
+  playedTctQuestionIds: string[];
+  playedOchoIds: string[];
+  playedDuckCategoryIds: string[];
+  playedParticolareItemIds: string[];
+  playedBuzzItemIds: string[];
+  playedSfidaGinoFlagIds: string[];
+  playedSfidaGinoCapitalIds: string[];
+  playedCaroAmicoDomandaIds: string[];
+  deactivatedWorldIds: string[];
+  finalRoundPlayerIds: string[];
+  finalRoundDoneIds: string[];
+  finalRoundIndex: number;
+  lastGameEndedPayload: GameEndedPayload | null;
 }
 
 const BASE_REWARD = 20;
@@ -360,6 +411,7 @@ export class GameSession {
       token: null,
       name: name.trim().slice(0, 20) || "Giocatore",
       isHost,
+      isSpectator: false,
       coins: 0,
       boardPosition: { nodeId: CITTADELLA_ID, onNode: true },
       pendingRoll: null,
@@ -728,7 +780,7 @@ export class GameSession {
   private hasPassiveEffect(player: InternalPlayer, type: CardEffectType): boolean {
     return player.collection.some((owned) => {
       const def = CARD_CATALOG.find((c) => c.id === owned.cardId);
-      return !!def?.effect.isPassive && def.effect.type === type;
+      return !!def?.effect?.isPassive && def.effect.type === type;
     });
   }
 
@@ -738,7 +790,7 @@ export class GameSession {
   private applyPassiveCardEffects(player: InternalPlayer) {
     for (const owned of player.collection) {
       const def = CARD_CATALOG.find((c) => c.id === owned.cardId);
-      if (!def?.effect.isPassive) continue;
+      if (!def?.effect?.isPassive) continue;
 
       if (def.effect.type === "passiveFreeChest") {
         this.addStatus(
@@ -757,8 +809,12 @@ export class GameSession {
     const me = this.players.get(forPlayerId);
     if (!me) return null;
 
+    // gli spettatori non hanno una pedina sul tabellone: niente posizione da
+    // mandare al client, così non compare nessun segnalino per loro
     const positions: Record<string, BoardPosition> = {};
-    for (const p of this.players.values()) positions[p.id] = p.boardPosition;
+    for (const p of this.players.values()) {
+      if (!p.isSpectator) positions[p.id] = p.boardPosition;
+    }
 
     return {
       code: this.code,
@@ -776,6 +832,7 @@ export class GameSession {
         name: p.name,
         coins: p.coins,
         isHost: p.isHost,
+        isSpectator: p.isSpectator,
         connected: p.connected,
         token: p.token,
         activeEffects: p.activeEffects,
@@ -787,6 +844,7 @@ export class GameSession {
         name: me.name,
         coins: me.coins,
         isHost: me.isHost,
+        isSpectator: me.isSpectator,
         connected: me.connected,
         token: me.token,
         activeEffects: me.activeEffects,
@@ -817,14 +875,22 @@ export class GameSession {
       return;
     }
     if (this.phase === "playing") return;
-    if ([...this.players.values()].some((p) => p.token === null)) {
+    const activePlayers = [...this.players.values()].filter((p) => !p.isSpectator);
+    if (activePlayers.length === 0) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Serve almeno un giocatore (oltre agli eventuali spettatori) per iniziare.",
+      });
+      return;
+    }
+    if (activePlayers.some((p) => p.token === null)) {
       io.to(player.socketId).emit("error:message", {
         message: "Tutti i giocatori devono scegliere una pedina prima di iniziare.",
       });
       return;
     }
 
-    // mescola casualmente l'ordine dei turni (Fisher-Yates)
+    // mescola casualmente l'ordine dei turni (Fisher-Yates); this.turnOrder
+    // esclude già gli spettatori (vedi setSpectator)
     for (let i = this.turnOrder.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [this.turnOrder[i], this.turnOrder[j]] = [this.turnOrder[j], this.turnOrder[i]];
@@ -843,6 +909,12 @@ export class GameSession {
       });
       return;
     }
+    if (player.isSpectator) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Sei in modalità spettatore: non puoi scegliere una pedina.",
+      });
+      return;
+    }
     const takenByOther = [...this.players.values()].some(
       (p) => p.id !== playerId && p.token === token
     );
@@ -853,6 +925,36 @@ export class GameSession {
       return;
     }
     player.token = token;
+    this.broadcastState(io);
+  }
+
+  // Solo l'host, solo nella lobby: passa tra "giocatore" e "spettatore".
+  // Da spettatore l'host può comunque gestire la partita (espellere,
+  // impostare monete, salvare) ma non ha una pedina, non entra nell'ordine
+  // dei turni e non partecipa alla partita vera e propria.
+  setSpectator(playerId: string, spectator: boolean, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (!player.isHost) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Solo l'host può scegliere di fare da spettatore.",
+      });
+      return;
+    }
+    if (this.phase !== "lobby") {
+      io.to(player.socketId).emit("error:message", {
+        message: "Non puoi cambiare modalità a partita iniziata.",
+      });
+      return;
+    }
+
+    player.isSpectator = spectator;
+    if (spectator) {
+      player.token = null;
+      this.turnOrder = this.turnOrder.filter((id) => id !== playerId);
+    } else if (!this.turnOrder.includes(playerId)) {
+      this.turnOrder.push(playerId);
+    }
     this.broadcastState(io);
   }
 
@@ -1762,6 +1864,7 @@ export class GameSession {
     this.phase = "finalRound";
 
     for (const p of this.players.values()) {
+      if (p.isSpectator) continue; // non partecipa alla partita, niente da resettare
       // tutti tornano alla Cittadella (chi era su un mondo appena
       // disattivato ci è già stato riportato sopra; qui copriamo comunque
       // ogni caso residuo) e si azzera qualsiasi minigioco/scelta pendente:
@@ -1804,18 +1907,41 @@ export class GameSession {
   // connessi): calcola la classifica finale e decreta il vincitore.
   // Criteri, in ordine: (1) più carte DIVERSE possedute, (2) a parità, più
   // copie totali possedute, (3) a ulteriore parità, più monete rimaste.
-  private finishGame(io: IOServer) {
+  //
+  // "forcedWinnerId" si usa solo per la vittoria anticipata da collezione
+  // completa (vedi checkCollectionComplete): in quel caso non si applica
+  // nessun parimerito, il vincitore è quel giocatore e basta.
+  private finishGame(
+    io: IOServer,
+    reason: GameEndedPayload["reason"] = "worldsExhausted",
+    forcedWinnerId?: string
+  ) {
     this.phase = "ended";
+    // partita finita: non c'è più nulla da riprendere, eventuali salvataggi
+    // precedenti per questo codice stanza non servono più
+    deleteSave(this.code);
 
-    const standings = [...this.players.values()].map((p) => {
-      const distinctCards = new Set(p.collection.map((c) => c.cardId)).size;
-      return {
-        playerId: p.id,
-        distinctCards,
-        totalCards: p.collection.length,
-        coins: p.coins,
-      };
-    });
+    // per la vittoria da collezione completa contiamo solo le 25 figurine
+    // "normali" (vedi commento su totalCardCount più sotto): altrimenti chi
+    // possiede anche la segreta mostrerebbe un rapporto tipo "26/25".
+    const normalCardIds =
+      reason === "collectionComplete"
+        ? new Set(CARD_CATALOG.filter((c) => c.rarity !== "segreta").map((c) => c.id))
+        : null;
+
+    const standings = [...this.players.values()]
+      .filter((p) => !p.isSpectator) // chi ha gestito la partita da spettatore non entra in classifica
+      .map((p) => {
+        const ownedIds = p.collection.map((c) => c.cardId);
+        const relevantIds = normalCardIds ? ownedIds.filter((id) => normalCardIds.has(id)) : ownedIds;
+        const distinctCards = new Set(relevantIds).size;
+        return {
+          playerId: p.id,
+          distinctCards,
+          totalCards: p.collection.length,
+          coins: p.coins,
+        };
+      });
 
     standings.sort((a, b) => {
       if (b.distinctCards !== a.distinctCards) return b.distinctCards - a.distinctCards;
@@ -1823,22 +1949,59 @@ export class GameSession {
       return b.coins - a.coins;
     });
 
-    const top = standings[0];
-    const winnerIds = top
-      ? standings
-          .filter(
-            (s) =>
-              s.distinctCards === top.distinctCards &&
-              s.totalCards === top.totalCards &&
-              s.coins === top.coins
-          )
-          .map((s) => s.playerId)
-      : [];
+    let winnerIds: string[];
+    if (forcedWinnerId) {
+      winnerIds = [forcedWinnerId];
+    } else {
+      const top = standings[0];
+      winnerIds = top
+        ? standings
+            .filter(
+              (s) =>
+                s.distinctCards === top.distinctCards &&
+                s.totalCards === top.totalCards &&
+                s.coins === top.coins
+            )
+            .map((s) => s.playerId)
+        : [];
+    }
 
-    const payload: GameEndedPayload = { standings, winnerIds, totalCardCount: CARD_CATALOG.length };
+    // per la vittoria da collezione completa il traguardo è "tutte le 25
+    // normali" (la segreta è un bonus, non richiesto): mostriamo quindi 25
+    // come totale invece di 26, altrimenti il vincitore sembrerebbe non
+    // aver completato nulla se non possiede anche la segreta.
+    const totalCardCount =
+      reason === "collectionComplete"
+        ? CARD_CATALOG.filter((c) => c.rarity !== "segreta").length
+        : CARD_CATALOG.length;
+
+    const payload: GameEndedPayload = {
+      standings,
+      winnerIds,
+      totalCardCount,
+      reason,
+    };
     this.lastGameEndedPayload = payload;
     io.emit("game:ended", payload);
     this.broadcastState(io);
+  }
+
+  // Controlla se il giocatore ha appena completato l'intera collezione delle
+  // 25 figurine "normali" (la 26esima, segreta, non è richiesta: è un pezzo
+  // raro/bonus, non un requisito). Se sì, la partita finisce all'istante con
+  // quel giocatore come unico vincitore, senza aspettare l'esaurimento di
+  // tutti i mondi né il giro finale. Va chiamata subito dopo ogni punto in
+  // cui una figurina entra nella collezione di un giocatore.
+  private checkCollectionComplete(player: InternalPlayer, io: IOServer) {
+    if (this.phase !== "playing") return;
+    const requiredIds = CARD_CATALOG.filter((c) => c.rarity !== "segreta").map((c) => c.id);
+    const ownedIds = new Set(player.collection.map((c) => c.cardId));
+    if (!requiredIds.every((id) => ownedIds.has(id))) return;
+
+    io.emit("error:message", {
+      message: `${player.name} ha completato l'intera collezione di figurine! La partita finisce qui.`,
+    });
+    this.finishGame(io, "collectionComplete", player.id);
   }
 
   beginMinigame(playerId: string, io: IOServer) {
@@ -3559,6 +3722,13 @@ export class GameSession {
     const cardDef = CARD_CATALOG.find((c) => c.id === cardId);
     if (!cardDef) return;
 
+    if (!cardDef.effect) {
+      io.to(player.socketId).emit("error:message", {
+        message: "Questa figurina non ha nessun effetto da attivare: vale solo come pezzo da collezione.",
+      });
+      return;
+    }
+
     if (cardDef.effect.isPassive) {
       io.to(player.socketId).emit("error:message", {
         message: "Questa figurina ha un effetto passivo: si applica da sola, non va attivata.",
@@ -3809,6 +3979,7 @@ export class GameSession {
       player.cardsUsedThisTurn.add(cardId);
       const picked = commons[Math.floor(Math.random() * commons.length)];
       player.collection.push({ instanceId: nextCardInstanceId(), cardId: picked.id, used: false });
+      this.checkCollectionComplete(player, io);
       this.broadcastState(io);
       return;
     }
@@ -3864,9 +4035,10 @@ export class GameSession {
 
     const RARITY_WEIGHTS: { rarity: CardRarity; weight: number }[] = [
       { rarity: "comune", weight: 60 },
-      { rarity: "rara", weight: 25 },
-      { rarity: "epica", weight: 12 },
-      { rarity: "leggendaria", weight: 3 },
+      { rarity: "rara", weight: 30 },
+      { rarity: "epica", weight: 7 },
+      { rarity: "leggendaria", weight: 2 },
+      { rarity: "segreta", weight: 1 },
     ];
     const totalWeight = RARITY_WEIGHTS.reduce((sum, r) => sum + r.weight, 0);
 
@@ -3894,6 +4066,209 @@ export class GameSession {
     }
 
     io.to(player.socketId).emit("shop:packOpened", { packId, cards: pulledCards });
+    this.checkCollectionComplete(player, io);
     this.broadcastState(io);
+  }
+
+  // Salva la partita su file (vedi server/game/saveStore.ts) così può essere
+  // ripresa più avanti ricollegandosi con lo stesso codice stanza, anche
+  // dopo un riavvio del server (vedi PartyManager.get, che ripesca da disco
+  // se non trova nulla in memoria). Prima di scrivere, riporta OGNI
+  // giocatore a uno stato "neutro" (torna alla mappa): qualsiasi minigioco,
+  // domanda, imprevisto o scelta in corso viene annullato, ma nessun
+  // progresso permanente (monete, figurine, posizione, mondi esauriti) va
+  // perso. Scelta deliberata per tenere il salvataggio semplice e robusto,
+  // invece di dover catturare fedelmente lo stato esatto di ogni possibile
+  // minigioco a metà.
+  saveGame(playerId: string, io: IOServer) {
+    if (this.phase === "ended") return; // partita già conclusa: nulla da salvare
+
+    const triggeringPlayer = this.players.get(playerId);
+    if (!triggeringPlayer?.isHost) {
+      if (triggeringPlayer) {
+        io.to(triggeringPlayer.socketId).emit("error:message", {
+          message: "Solo l'host può salvare la partita.",
+        });
+      }
+      return;
+    }
+
+    // eventi di sessione (coinvolgono più giocatori insieme, non un singolo
+    // InternalPlayer): TCT ha anche un timer reale da fermare, Buzz no.
+    if (this.pendingTct?.timer) clearTimeout(this.pendingTct.timer);
+    this.pendingTct = null;
+    this.pendingBuzz = null;
+
+    for (const p of this.players.values()) {
+      p.pendingRoll = null;
+      p.pendingShop = false;
+      p.pendingQuestion = null;
+      p.pendingWorldId = null;
+      p.awaitingWheelStart = false;
+      p.awaitingQuizStart = false;
+      p.pendingSurprise = null;
+      p.pendingChoice = null;
+      p.pendingShieldContext = null;
+      p.pendingTop5 = null;
+      p.awaitingTop5Start = false;
+      p.awaitingCaroAmicoSelfChoice = false;
+      p.pendingCaroAmico = null;
+      p.awaitingCaroAmicoStart = false;
+      p.pendingOcho = null;
+      p.awaitingOchoStart = false;
+      p.pendingDuck = null;
+      p.awaitingDuckStart = false;
+      p.pendingParticolare = null;
+      p.awaitingParticolareStart = false;
+      p.pendingSfidaGino = null;
+      p.awaitingSfidaGinoStart = false;
+    }
+
+    // il giro finale (fase "finalRound") non è un "minigioco a metà": è
+    // semplicemente "di chi è il turno", quindi va preservato per intero.
+    // L'unica cosa da sistemare è riaprire lo shop di chi ha il turno ora
+    // (pendingShop è stato azzerato per tutti sopra, per sicurezza).
+    if (this.phase === "finalRound" && this.finalRoundPlayerIds.length > 0) {
+      const currentId =
+        this.finalRoundPlayerIds[this.finalRoundIndex % this.finalRoundPlayerIds.length];
+      const current = this.players.get(currentId);
+      if (current) current.pendingShop = true;
+    }
+
+    writeSave(this.code, this.serialize());
+
+    io.emit("error:message", {
+      message: `💾 Partita salvata${
+        triggeringPlayer ? ` da ${triggeringPlayer.name}` : ""
+      }! Per riprenderla in futuro basta ricollegarsi con il codice ${this.code}.`,
+    });
+    this.broadcastState(io);
+    // avvisa i client di ricaricare la pagina: qualsiasi schermata di
+    // minigioco rimasta aperta localmente (stato React, non server) va
+    // ripulita, così tutti ripartono puliti dalla mappa (vedi App.tsx)
+    io.emit("game:saved");
+  }
+
+  serialize(): SerializedGameSession {
+    return {
+      code: this.code,
+      turnOrder: [...this.turnOrder],
+      currentTurnIndex: this.currentTurnIndex,
+      phase: this.phase,
+      players: [...this.players.values()].map((p) => ({
+        id: p.id,
+        clientId: p.clientId,
+        token: p.token,
+        name: p.name,
+        isHost: p.isHost,
+        isSpectator: p.isSpectator,
+        coins: p.coins,
+        boardPosition: p.boardPosition,
+        collection: p.collection,
+        activeEffects: p.activeEffects,
+        statuses: p.statuses,
+        caroAmicoSelfId: p.caroAmicoSelfId,
+        forcedNextCategory: p.forcedNextCategory,
+        bonusRolls: p.bonusRolls,
+        cardsUsedThisTurn: [...p.cardsUsedThisTurn],
+      })),
+      playedTop5Ids: [...this.playedTop5Ids],
+      playedTctQuestionIds: [...this.playedTctQuestionIds],
+      playedOchoIds: [...this.playedOchoIds],
+      playedDuckCategoryIds: [...this.playedDuckCategoryIds],
+      playedParticolareItemIds: [...this.playedParticolareItemIds],
+      playedBuzzItemIds: [...this.playedBuzzItemIds],
+      playedSfidaGinoFlagIds: [...this.playedSfidaGinoFlagIds],
+      playedSfidaGinoCapitalIds: [...this.playedSfidaGinoCapitalIds],
+      playedCaroAmicoDomandaIds: [...this.playedCaroAmicoDomandaIds],
+      deactivatedWorldIds: [...this.deactivatedWorldIds],
+      finalRoundPlayerIds: [...this.finalRoundPlayerIds],
+      finalRoundDoneIds: [...this.finalRoundDoneIds],
+      finalRoundIndex: this.finalRoundIndex,
+      lastGameEndedPayload: this.lastGameEndedPayload,
+    };
+  }
+
+  // Ricostruisce una partita da un salvataggio (vedi saveGame più sopra).
+  // Ogni giocatore rientra scollegato (connected: false, nessun socketId):
+  // tornerà online da solo non appena qualcuno si ricollega con lo stesso
+  // clientId (vedi addPlayer). Nessuno stato "a metà" da ripristinare, dato
+  // che saveGame lo azzera sempre prima di scrivere su disco.
+  static deserialize(data: SerializedGameSession): GameSession {
+    const session = new GameSession(data.code);
+    session.turnOrder = [...data.turnOrder];
+    session.currentTurnIndex = data.currentTurnIndex;
+    session.phase = data.phase;
+
+    for (const sp of data.players) {
+      const player: InternalPlayer = {
+        id: sp.id,
+        socketId: "",
+        clientId: sp.clientId,
+        connected: false,
+        token: sp.token,
+        name: sp.name,
+        isHost: sp.isHost,
+        isSpectator: sp.isSpectator,
+        coins: sp.coins,
+        boardPosition: sp.boardPosition,
+        pendingRoll: null,
+        pendingShop: false,
+        collection: sp.collection,
+        activeEffects: sp.activeEffects,
+        statuses: sp.statuses,
+        pendingQuestion: null,
+        pendingWorldId: null,
+        awaitingWheelStart: false,
+        awaitingQuizStart: false,
+        pendingSurprise: null,
+        pendingChoice: null,
+        pendingShieldContext: null,
+        cardsUsedThisTurn: new Set(sp.cardsUsedThisTurn),
+        bonusRolls: sp.bonusRolls,
+        pendingTop5: null,
+        awaitingTop5Start: false,
+        forcedNextCategory: sp.forcedNextCategory,
+        caroAmicoSelfId: sp.caroAmicoSelfId,
+        awaitingCaroAmicoSelfChoice: false,
+        pendingCaroAmico: null,
+        awaitingCaroAmicoStart: false,
+        pendingOcho: null,
+        awaitingOchoStart: false,
+        pendingDuck: null,
+        awaitingDuckStart: false,
+        pendingParticolare: null,
+        awaitingParticolareStart: false,
+        pendingSfidaGino: null,
+        awaitingSfidaGinoStart: false,
+      };
+      session.players.set(player.id, player);
+    }
+
+    session.playedTop5Ids = new Set(data.playedTop5Ids);
+    session.playedTctQuestionIds = new Set(data.playedTctQuestionIds);
+    session.playedOchoIds = new Set(data.playedOchoIds);
+    session.playedDuckCategoryIds = new Set(data.playedDuckCategoryIds);
+    session.playedParticolareItemIds = new Set(data.playedParticolareItemIds);
+    session.playedBuzzItemIds = new Set(data.playedBuzzItemIds);
+    session.playedSfidaGinoFlagIds = new Set(data.playedSfidaGinoFlagIds);
+    session.playedSfidaGinoCapitalIds = new Set(data.playedSfidaGinoCapitalIds);
+    session.playedCaroAmicoDomandaIds = new Set(data.playedCaroAmicoDomandaIds);
+    session.deactivatedWorldIds = new Set(data.deactivatedWorldIds);
+    session.finalRoundPlayerIds = [...data.finalRoundPlayerIds];
+    session.finalRoundDoneIds = new Set(data.finalRoundDoneIds);
+    session.finalRoundIndex = data.finalRoundIndex;
+    session.lastGameEndedPayload = data.lastGameEndedPayload;
+
+    // se eravamo nel giro finale, il giocatore di turno deve ritrovare lo
+    // shop già aperto (coerente con quanto fatto in saveGame)
+    if (session.phase === "finalRound" && session.finalRoundPlayerIds.length > 0) {
+      const currentId =
+        session.finalRoundPlayerIds[session.finalRoundIndex % session.finalRoundPlayerIds.length];
+      const current = session.players.get(currentId);
+      if (current) current.pendingShop = true;
+    }
+
+    return session;
   }
 }

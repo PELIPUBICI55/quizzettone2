@@ -50,14 +50,18 @@ export function PartyMenu({ state }: Props) {
                   >
                     <span style={{ fontSize: "0.9rem", opacity: p.connected ? 1 : 0.55 }}>
                       {p.id === state.currentTurnPlayerId && "🎲 "}
+                      {p.isSpectator && "👁️ "}
                       {p.name}
                       {p.isHost && " 👑"}
+                      {p.isSpectator && " (spettatore)"}
                       {p.id === state.me.id && " (tu)"}
                       {!p.connected && " · 🔴 offline"}
                       <br />
-                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                        🪙{p.coins} · 🎴{p.cardCount}
-                      </span>
+                      {!p.isSpectator && (
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                          🪙{p.coins} · 🎴{p.cardCount}
+                        </span>
+                      )}
                     </span>
                     {isHost && p.id !== state.me.id && (
                       <button
@@ -74,7 +78,7 @@ export function PartyMenu({ state }: Props) {
                     )}
                   </div>
 
-                  {isHost && (
+                  {isHost && !p.isSpectator && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.4rem" }}>
                       <button
                         className="btn-outline"

@@ -1,4 +1,5 @@
-import { GameSession } from "./GameSession.js";
+import { GameSession, SerializedGameSession } from "./GameSession.js";
+import { readSave } from "./saveStore.js";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // niente 0/O/1/I ambigui
 
@@ -21,8 +22,21 @@ export class PartyManager {
     return session;
   }
 
+  // Se la partita non è (più) in memoria, prima di arrenderci controlliamo
+  // se esiste un salvataggio su disco per questo codice (vedi
+  // GameSession.saveGame): così ricollegarsi con lo stesso codice stanza
+  // funziona anche dopo che tutti erano usciti, o dopo un riavvio del
+  // server. Una volta ripescata, resta in memoria come una partita normale.
   get(code: string): GameSession | undefined {
-    return this.sessions.get(code.toUpperCase());
+    const upperCode = code.toUpperCase();
+    const existing = this.sessions.get(upperCode);
+    if (existing) return existing;
+
+    const saved = readSave(upperCode);
+    if (!saved) return undefined;
+    const restored = GameSession.deserialize(saved as SerializedGameSession);
+    this.sessions.set(upperCode, restored);
+    return restored;
   }
 
   removeIfEmpty(code: string) {

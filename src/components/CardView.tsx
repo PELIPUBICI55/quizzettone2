@@ -15,6 +15,7 @@ const RARITY_TITLES: Record<CardDef["rarity"], string> = {
   rara: "Figurina Rara",
   epica: "Figurina Epica",
   leggendaria: "Figurina Leggendaria",
+  segreta: "Figurina Segreta",
 };
 
 // posizioni fisse dei prismi di luce (solo figurine leggendarie), per non
@@ -47,12 +48,12 @@ const PRISM_SPOTS = [
 ];
 
 export function CardView({ card, ownedCount, locked, spent, capped, onUse, onClick }: Props) {
-  const showPrisms = !locked && card.rarity === "leggendaria";
+  const showPrisms = !locked && (card.rarity === "leggendaria" || card.rarity === "segreta");
 
   return (
     <div
       className={`tcg-card rarity-${card.rarity}${locked ? " locked" : ""}`}
-      title={card.effect.label}
+      title={card.effect?.label}
       onClick={onClick}
     >
       {capped && (
@@ -78,13 +79,13 @@ export function CardView({ card, ownedCount, locked, spent, capped, onUse, onCli
           />
         ))}
 
-      {!locked && card.effect.isQuickEffect && (
+      {!locked && card.effect?.isQuickEffect && (
         <span className="quick-badge" title="Effetto rapido: usabile in qualsiasi momento">
           ⚡
         </span>
       )}
 
-      {!locked && card.effect.isPassive && (
+      {!locked && card.effect?.isPassive && (
         <span className="passive-badge" title="Effetto passivo: sempre attivo finché la possiedi">
           ∞
         </span>
@@ -106,7 +107,10 @@ export function CardView({ card, ownedCount, locked, spent, capped, onUse, onCli
 
       {!locked && (
         <div className="description">
-          {card.description} <strong>{spent ? "Effetto già usato." : card.effect.label + "."}</strong>
+          {card.description}{" "}
+          {card.effect && (
+            <strong>{spent ? "Effetto già usato." : card.effect.label + "."}</strong>
+          )}
         </div>
       )}
 

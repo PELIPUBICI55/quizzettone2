@@ -64,6 +64,7 @@ import { DiceOverlay } from "./components/DiceOverlay";
 import { CollectionMenu } from "./components/CollectionMenu";
 import { FullCollectionMenu } from "./components/FullCollectionMenu";
 import { PartyMenu } from "./components/PartyMenu";
+import { SaveGameButton } from "./components/SaveGameButton";
 import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
 import type { ParticolareCategoryId, ParticolareQuestionPayload, ParticolareEndedPayload } from "../shared/types";
@@ -480,6 +481,13 @@ export default function App() {
     const onShieldUsed = () => setShieldPromptInfo(null);
     const onError = (p: { message: string }) => setError(p.message);
     const onGameEnded = (p: GameEndedPayload) => setGameEndedPayload(p);
+    // la partita è stata salvata: ricarichiamo la pagina poco dopo, così
+    // qualsiasi schermata di minigioco rimasta aperta si azzera e si
+    // riparte puliti (il messaggio "Partita salvata" resta visibile un
+    // momento prima del reload). Ci si ricollega poi come al solito.
+    const onGameSaved = () => {
+      setTimeout(() => window.location.reload(), 1800);
+    };
     const onKicked = () => {
       setState(null);
       setShowTurnOrder(false);
@@ -537,6 +545,7 @@ export default function App() {
     socket.on("board:shieldUsed", onShieldUsed);
     socket.on("error:message", onError);
     socket.on("game:ended", onGameEnded);
+    socket.on("game:saved", onGameSaved);
     socket.on("party:kicked", onKicked);
     socket.on("disconnect", onDisconnect);
 
@@ -590,6 +599,7 @@ export default function App() {
       socket.off("board:shieldUsed", onShieldUsed);
       socket.off("error:message", onError);
       socket.off("game:ended", onGameEnded);
+      socket.off("game:saved", onGameSaved);
       socket.off("party:kicked", onKicked);
       socket.off("disconnect", onDisconnect);
     };
@@ -742,11 +752,18 @@ export default function App() {
         <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
           Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
         </span>
-        <span className="coin-pill">🪙 {state.me.coins}</span>
+        {state.me.isSpectator ? (
+          <span className="coin-pill" title="Stai gestendo la partita senza giocare">
+            👁️ Spettatore
+          </span>
+        ) : (
+          <span className="coin-pill">🪙 {state.me.coins}</span>
+        )}
         <PartyMenu state={state} />
         <StatusMenu state={state} />
         <CollectionMenu state={state} />
         <FullCollectionMenu state={state} />
+        <SaveGameButton state={state} />
       </div>
 
       <div className="main-area">
