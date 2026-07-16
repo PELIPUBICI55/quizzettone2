@@ -472,6 +472,41 @@ export interface BuzzEndedPayload {
   coinsAwarded: number;
 }
 
+// SFIDA GINO (mondo "rovine"): gioca solo il giocatore di turno, a voce,
+// come in Grandioso Quiz Particolare. Una ruota estrae una fra 2 categorie
+// (Indovina la Capitale / Indovina la Bandiera), poi una sola domanda al suo
+// interno. Il premio è fisso e binario: 2000 monete oppure 0, deciso
+// dall'host dopo aver sentito la risposta a voce.
+export type SfidaGinoCategoryId = "capitali" | "bandiere";
+
+export interface SfidaGinoCategoryDef {
+  id: SfidaGinoCategoryId;
+  name: string;
+  emoji: string;
+}
+
+// Per "capitali" il prompt è testuale (il nome dello stato, la risposta è la
+// capitale); per "bandiere" il prompt è l'immagine della bandiera (la
+// risposta è il nome dello stato).
+export type SfidaGinoPrompt =
+  | { kind: "text"; text: string }
+  | { kind: "image"; imageUrl: string };
+
+export interface SfidaGinoQuestionPayload {
+  playerId: string;
+  categoryId: SfidaGinoCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  prompt: SfidaGinoPrompt;
+  revealed: boolean;
+  answer: string | null; // valorizzata solo quando revealed è true
+}
+
+export interface SfidaGinoEndedPayload {
+  playerId: string;
+  coinsAwarded: number; // 2000 oppure 0
+}
+
 export type SurpriseEffectCode =
   | "moveForward"
   | "moveBackward"
@@ -573,6 +608,9 @@ export interface ClientToServerEvents {
   "buzz:reveal": () => void;
   "buzz:mediaControl": (payload: ParticolareMediaControlPayload) => void;
   "buzz:resolve": (payload: { winnerId: string | null }) => void;
+  "sfidaGino:beginGame": () => void;
+  "sfidaGino:reveal": () => void;
+  "sfidaGino:resolve": (payload: { coinsAwarded: number }) => void;
 }
 
 // Eventi server -> client
@@ -659,4 +697,11 @@ export interface ServerToClientEvents {
   "buzz:question": (payload: BuzzQuestionPayload) => void;
   "buzz:mediaControl": (payload: ParticolareMediaControlPayload) => void;
   "buzz:ended": (payload: BuzzEndedPayload) => void;
+
+  "sfidaGino:spin": (payload: { playerId: string; durationMs: number }) => void;
+  "sfidaGino:categoryDrawn": (
+    payload: { playerId: string; categoryId: SfidaGinoCategoryId; categoryName: string; categoryEmoji: string }
+  ) => void;
+  "sfidaGino:question": (payload: SfidaGinoQuestionPayload) => void;
+  "sfidaGino:ended": (payload: SfidaGinoEndedPayload) => void;
 }

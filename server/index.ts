@@ -248,6 +248,27 @@ io.on("connection", (socket) => {
     session?.resolveBuzz(loc.playerId, winnerId, io);
   });
 
+  socket.on("sfidaGino:beginGame", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.beginSfidaGinoGame(loc.playerId, io);
+  });
+
+  socket.on("sfidaGino:reveal", () => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.revealSfidaGinoAnswer(loc.playerId, io);
+  });
+
+  socket.on("sfidaGino:resolve", ({ coinsAwarded }) => {
+    const loc = socketLocation.get(socket.id);
+    if (!loc) return;
+    const session = parties.get(loc.code);
+    session?.resolveSfidaGino(loc.playerId, coinsAwarded, io);
+  });
+
   socket.on("tct:answer", ({ answerIndex }) => {
     const loc = socketLocation.get(socket.id);
     if (!loc) return;

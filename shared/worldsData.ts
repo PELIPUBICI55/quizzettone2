@@ -53,7 +53,7 @@ export const WORLDS: WorldDef[] = [
   },
   {
     id: "rovine",
-    name: "3/4",
+    name: "SFIDA GINO",
     emoji: "🏛️",
     tagline: "Ciò che resta di un impero dimenticato",
     colorFrom: "#8a7a4f",

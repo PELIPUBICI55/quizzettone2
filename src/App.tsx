@@ -45,6 +45,9 @@ import { ParticolareGame } from "./components/ParticolareGame";
 import { BuzzWheel } from "./components/BuzzWheel";
 import { BuzzCategoryReveal } from "./components/BuzzCategoryReveal";
 import { BuzzGame } from "./components/BuzzGame";
+import { SfidaGinoWheel } from "./components/SfidaGinoWheel";
+import { SfidaGinoCategoryReveal } from "./components/SfidaGinoCategoryReveal";
+import { SfidaGinoGame } from "./components/SfidaGinoGame";
 import { TctMinigame } from "./components/TctMinigame";
 import { SurpriseScreen } from "./components/SurpriseScreen";
 import { ChooseTargetScreen } from "./components/ChooseTargetScreen";
@@ -63,6 +66,7 @@ import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
 import type { ParticolareCategoryId, ParticolareQuestionPayload, ParticolareEndedPayload } from "../shared/types";
 import type { BuzzQuestionPayload, BuzzEndedPayload } from "../shared/types";
+import type { SfidaGinoCategoryId, SfidaGinoQuestionPayload, SfidaGinoEndedPayload } from "../shared/types";
 
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
@@ -145,6 +149,16 @@ export default function App() {
     categoryEmoji: string;
   } | null>(null);
   const [buzzQuestion, setBuzzQuestion] = useState<BuzzQuestionPayload | null>(null);
+  const [sfidaGinoSpinInfo, setSfidaGinoSpinInfo] = useState<{ playerId: string; durationMs: number } | null>(
+    null
+  );
+  const [sfidaGinoCategoryInfo, setSfidaGinoCategoryInfo] = useState<{
+    playerId: string;
+    categoryId: SfidaGinoCategoryId;
+    categoryName: string;
+    categoryEmoji: string;
+  } | null>(null);
+  const [sfidaGinoQuestion, setSfidaGinoQuestion] = useState<SfidaGinoQuestionPayload | null>(null);
   const [tctStartedInfo, setTctStartedInfo] = useState<TctStartedPayload | null>(null);
   const [tctQuestionInfo, setTctQuestionInfo] = useState<TctQuestionPayload | null>(null);
   const [tctQuestionResultInfo, setTctQuestionResultInfo] =
@@ -195,6 +209,9 @@ export default function App() {
       setBuzzSpinInfo(null);
       setBuzzCategoryInfo(null);
       setBuzzQuestion(null);
+      setSfidaGinoSpinInfo(null);
+      setSfidaGinoCategoryInfo(null);
+      setSfidaGinoQuestion(null);
       setTctStartedInfo(null);
     };
     const onWheel = (p: WheelSpinPayload) => {
@@ -394,6 +411,31 @@ export default function App() {
       setBuzzSpinInfo(null);
       setBuzzCategoryInfo(null);
     };
+    const onSfidaGinoSpin = (p: { playerId: string; durationMs: number }) => {
+      setWelcomeInfo(null);
+      setSfidaGinoSpinInfo(p);
+      setSfidaGinoCategoryInfo(null);
+      setSfidaGinoQuestion(null);
+    };
+    const onSfidaGinoCategory = (p: {
+      playerId: string;
+      categoryId: SfidaGinoCategoryId;
+      categoryName: string;
+      categoryEmoji: string;
+    }) => {
+      setSfidaGinoSpinInfo(null);
+      setSfidaGinoCategoryInfo(p);
+      setSfidaGinoQuestion(null);
+    };
+    const onSfidaGinoQuestion = (p: SfidaGinoQuestionPayload) => {
+      setSfidaGinoCategoryInfo(null);
+      setSfidaGinoQuestion(p);
+    };
+    const onSfidaGinoEnded = (_p: SfidaGinoEndedPayload) => {
+      setSfidaGinoQuestion(null);
+      setSfidaGinoSpinInfo(null);
+      setSfidaGinoCategoryInfo(null);
+    };
     const onTctStarted = (p: TctStartedPayload) => {
       setWelcomeInfo(null);
       setTctStartedInfo(p);
@@ -475,6 +517,10 @@ export default function App() {
     socket.on("buzz:categoryDrawn", onBuzzCategory);
     socket.on("buzz:question", onBuzzQuestion);
     socket.on("buzz:ended", onBuzzEnded);
+    socket.on("sfidaGino:spin", onSfidaGinoSpin);
+    socket.on("sfidaGino:categoryDrawn", onSfidaGinoCategory);
+    socket.on("sfidaGino:question", onSfidaGinoQuestion);
+    socket.on("sfidaGino:ended", onSfidaGinoEnded);
     socket.on("tct:started", onTctStarted);
     socket.on("tct:question", onTctQuestion);
     socket.on("tct:questionResult", onTctQuestionResult);
@@ -523,6 +569,10 @@ export default function App() {
       socket.off("buzz:categoryDrawn", onBuzzCategory);
       socket.off("buzz:question", onBuzzQuestion);
       socket.off("buzz:ended", onBuzzEnded);
+      socket.off("sfidaGino:spin", onSfidaGinoSpin);
+      socket.off("sfidaGino:categoryDrawn", onSfidaGinoCategory);
+      socket.off("sfidaGino:question", onSfidaGinoQuestion);
+      socket.off("sfidaGino:ended", onSfidaGinoEnded);
       socket.off("tct:started", onTctStarted);
       socket.off("tct:question", onTctQuestion);
       socket.off("tct:questionResult", onTctQuestionResult);
@@ -564,6 +614,9 @@ export default function App() {
     setParticolareSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setParticolareCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     setParticolareQuestion((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setSfidaGinoSpinInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setSfidaGinoCategoryInfo((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
+    setSfidaGinoQuestion((prev) => (prev && prev.playerId !== state.me.id ? null : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.currentTurnPlayerId]);
 
@@ -661,6 +714,9 @@ export default function App() {
   const particolareSpinPlayer = state.players.find((p) => p.id === particolareSpinInfo?.playerId);
   const particolareCategoryPlayer = state.players.find((p) => p.id === particolareCategoryInfo?.playerId);
   const particolareQuestionPlayer = state.players.find((p) => p.id === particolareQuestion?.playerId);
+  const sfidaGinoSpinPlayer = state.players.find((p) => p.id === sfidaGinoSpinInfo?.playerId);
+  const sfidaGinoCategoryPlayer = state.players.find((p) => p.id === sfidaGinoCategoryInfo?.playerId);
+  const sfidaGinoQuestionPlayer = state.players.find((p) => p.id === sfidaGinoQuestion?.playerId);
   const surprisePlayer = state.players.find((p) => p.id === surpriseInfo?.playerId);
   const quizPlayer = state.players.find((p) => p.id === quizPayload?.playerId);
 
@@ -805,6 +861,25 @@ export default function App() {
             isHost={state.me.isHost}
             myId={state.me.id}
             players={state.players}
+          />
+        ) : sfidaGinoSpinInfo ? (
+          <SfidaGinoWheel
+            isMine={sfidaGinoSpinInfo.playerId === state.me.id}
+            playerName={sfidaGinoSpinPlayer?.name ?? "?"}
+          />
+        ) : sfidaGinoCategoryInfo ? (
+          <SfidaGinoCategoryReveal
+            categoryName={sfidaGinoCategoryInfo.categoryName}
+            categoryEmoji={sfidaGinoCategoryInfo.categoryEmoji}
+            isMine={sfidaGinoCategoryInfo.playerId === state.me.id}
+            playerName={sfidaGinoCategoryPlayer?.name ?? "?"}
+          />
+        ) : sfidaGinoQuestion ? (
+          <SfidaGinoGame
+            payload={sfidaGinoQuestion}
+            isHost={state.me.isHost}
+            isMine={sfidaGinoQuestion.playerId === state.me.id}
+            playerName={sfidaGinoQuestionPlayer?.name ?? "?"}
           />
         ) : top5SpinInfo ? (
           <Top5Wheel

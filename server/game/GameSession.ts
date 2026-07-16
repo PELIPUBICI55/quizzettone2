@@ -14,6 +14,9 @@ import type {
   ServerToClientEvents,
   ParticolareCategoryId,
   BuzzQuestionPayload,
+  SfidaGinoCategoryId,
+  SfidaGinoPrompt,
+  SfidaGinoQuestionPayload,
   StatusType,
   SurpriseCardDef,
   Top5CategoryDef,
@@ -46,6 +49,12 @@ import {
   pickRandomParticolareItems,
 } from "../data/particolare.js";
 import { pickRandomBuzzItem } from "../data/buzz.js";
+import {
+  pickRandomSfidaGinoCategory,
+  pickRandomSfidaGinoFlag,
+  pickRandomSfidaGinoCapital,
+} from "../data/sfidaGino.js";
+import { SFIDA_GINO_CATEGORIES } from "../../shared/sfidaGinoCategories.js";
 import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -173,6 +182,21 @@ interface PendingBuzz {
   buzzOrder: string[]; // playerId in ordine di pressione del buzzer
 }
 
+// Stato di un round di SFIDA GINO (mondo "rovine") in corso. Gioca solo il
+// giocatore di turno, a voce, come in Grandioso Quiz Particolare: una ruota
+// estrae una fra 2 categorie (Indovina la Capitale / Indovina la Bandiera),
+// poi una sola domanda al suo interno. Premio fisso e binario: 2000 monete
+// oppure 0, deciso dall'host dopo la risposta a voce.
+interface PendingSfidaGino {
+  categoryId: SfidaGinoCategoryId;
+  categoryName: string;
+  categoryEmoji: string;
+  itemId: string; // per l'esclusione, non ripetere lo stesso stato nella stessa partita
+  prompt: SfidaGinoPrompt;
+  answer: string;
+  revealed: boolean;
+}
+
 interface InternalPlayer {
   id: string;
   socketId: string;
@@ -219,6 +243,8 @@ interface InternalPlayer {
   awaitingDuckStart: boolean; // sulla schermata di conferma categoria, in attesa che clicchi "Ok iniziamo"
   pendingParticolare: PendingParticolare | null;
   awaitingParticolareStart: boolean; // sulla schermata di conferma categoria, in attesa che il giocatore di turno clicchi "Ok iniziamo"
+  pendingSfidaGino: PendingSfidaGino | null;
+  awaitingSfidaGinoStart: boolean; // sulla schermata di conferma categoria, in attesa che il giocatore di turno clicchi "Ok iniziamo"
 }
 
 const BASE_REWARD = 20;
@@ -233,6 +259,7 @@ const TCT_INTRO_DELAY_MS = 2200;
 const OCHO_VALID_REWARDS = [0, 50, 100];
 const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
 const BUZZ_REWARD = 100; // premio fisso: una sola domanda, un solo vincitore (o nessuno)
+const SFIDA_GINO_REWARD = 2000; // premio fisso e binario: 2000 o 0, deciso dall'host
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -277,6 +304,8 @@ export class GameSession {
   private playedParticolareItemIds = new Set<string>();
   private playedBuzzItemIds = new Set<string>();
   private pendingBuzz: PendingBuzz | null = null;
+  private playedSfidaGinoFlagIds = new Set<string>();
+  private playedSfidaGinoCapitalIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -334,6 +363,8 @@ export class GameSession {
       awaitingDuckStart: false,
       pendingParticolare: null,
       awaitingParticolareStart: false,
+      pendingSfidaGino: null,
+      awaitingSfidaGinoStart: false,
     };
     this.players.set(player.id, player);
     this.turnOrder.push(player.id); // l'ordine dei turni si fissa all'ingresso e non cambia
@@ -521,6 +552,24 @@ export class GameSession {
       });
     } else if (this.pendingBuzz?.started) {
       io.to(player.socketId).emit("buzz:question", this.buildBuzzQuestionPayload());
+    }
+
+    // Stessa cosa per SFIDA GINO (mondo "rovine"): schermata di conferma
+    // categoria, oppure la domanda corrente (con risposta rivelata o meno).
+    const sfidaGinoPlayer = [...this.players.values()].find((p) => p.pendingSfidaGino);
+    if (sfidaGinoPlayer?.awaitingSfidaGinoStart) {
+      const { categoryId, categoryName, categoryEmoji } = sfidaGinoPlayer.pendingSfidaGino!;
+      io.to(player.socketId).emit("sfidaGino:categoryDrawn", {
+        playerId: sfidaGinoPlayer.id,
+        categoryId,
+        categoryName,
+        categoryEmoji,
+      });
+    } else if (sfidaGinoPlayer?.pendingSfidaGino) {
+      io.to(player.socketId).emit(
+        "sfidaGino:question",
+        this.buildSfidaGinoQuestionPayload(sfidaGinoPlayer)
+      );
     }
 
     // Se un round di TCT (mondo "abisso") è in corso, rimanda la domanda
@@ -1678,6 +1727,14 @@ export class GameSession {
       return;
     }
 
+    // Il mondo "rovine" (SFIDA GINO) ha una meccanica dedicata: gioca solo
+    // il giocatore di turno, a voce, come in Grandioso Quiz Particolare, ma
+    // con premio fisso e binario (2000 o 0 monete).
+    if (worldId === "rovine") {
+      this.beginSfidaGino(player, io);
+      return;
+    }
+
     // Per tutti gli altri mondi l'unico tipo di minigioco è il quiz.
     const resultType = "quiz" as const;
     const durationMs = 2600;
@@ -2696,6 +2753,150 @@ export class GameSession {
 
     io.emit("buzz:ended", { winnerId, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(triggeringPlayer, io);
+    this.broadcastState(io);
+  }
+
+  // Avvia SFIDA GINO (mondo "rovine"): pesca una fra le 2 categorie
+  // (Indovina la Capitale / Indovina la Bandiera) e una sola domanda al suo
+  // interno, mai ripetuta nella stessa partita. Se la categoria pescata è
+  // "capitali" ma il dataset non è ancora stato fornito (in attesa del file
+  // dell'utente), ripiega su "bandiere" così il mondo resta comunque
+  // giocabile nel frattempo.
+  private beginSfidaGino(player: InternalPlayer, io: IOServer) {
+    let category = pickRandomSfidaGinoCategory();
+
+    let prompt: SfidaGinoPrompt;
+    let answer: string;
+    let itemId: string;
+
+    if (category.id === "capitali") {
+      const capital = pickRandomSfidaGinoCapital(this.playedSfidaGinoCapitalIds);
+      if (capital) {
+        this.playedSfidaGinoCapitalIds.add(capital.id);
+        prompt = { kind: "text", text: capital.question };
+        answer = capital.answer;
+        itemId = capital.id;
+      } else {
+        // Dataset capitali non ancora popolato: ripiega su bandiere.
+        category = SFIDA_GINO_CATEGORIES.find((c) => c.id === "bandiere")!;
+        const flag = pickRandomSfidaGinoFlag(this.playedSfidaGinoFlagIds);
+        this.playedSfidaGinoFlagIds.add(flag.id);
+        prompt = { kind: "image", imageUrl: flag.imageUrl };
+        answer = flag.answer;
+        itemId = flag.id;
+      }
+    } else {
+      const flag = pickRandomSfidaGinoFlag(this.playedSfidaGinoFlagIds);
+      this.playedSfidaGinoFlagIds.add(flag.id);
+      prompt = { kind: "image", imageUrl: flag.imageUrl };
+      answer = flag.answer;
+      itemId = flag.id;
+    }
+
+    player.pendingSfidaGino = {
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryEmoji: category.emoji,
+      itemId,
+      prompt,
+      answer,
+      revealed: false,
+    };
+
+    const durationMs = 2600;
+    io.emit("sfidaGino:spin", { playerId: player.id, durationMs });
+
+    setTimeout(() => {
+      if (!player.pendingSfidaGino || player.pendingSfidaGino.itemId !== itemId) return;
+      player.awaitingSfidaGinoStart = true;
+      io.emit("sfidaGino:categoryDrawn", {
+        playerId: player.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryEmoji: category.emoji,
+      });
+    }, durationMs);
+  }
+
+  // Conferma la categoria e mostra la domanda.
+  beginSfidaGinoGame(playerId: string, io: IOServer) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (this.currentTurnPlayerId() !== playerId) {
+      io.to(player.socketId).emit("error:message", { message: "Non è il tuo turno." });
+      return;
+    }
+    if (!player.awaitingSfidaGinoStart || !player.pendingSfidaGino) return;
+    player.awaitingSfidaGinoStart = false;
+    this.broadcastSfidaGinoQuestion(player, io);
+  }
+
+  private buildSfidaGinoQuestionPayload(player: InternalPlayer): SfidaGinoQuestionPayload {
+    const p = player.pendingSfidaGino!;
+    return {
+      playerId: player.id,
+      categoryId: p.categoryId,
+      categoryName: p.categoryName,
+      categoryEmoji: p.categoryEmoji,
+      prompt: p.prompt,
+      revealed: p.revealed,
+      answer: p.revealed ? p.answer : null,
+    };
+  }
+
+  private broadcastSfidaGinoQuestion(player: InternalPlayer, io: IOServer) {
+    if (!player.pendingSfidaGino) return;
+    io.emit("sfidaGino:question", this.buildSfidaGinoQuestionPayload(player));
+  }
+
+  // Solo l'host può svelare la risposta corretta (dopo che il giocatore di
+  // turno ha risposto a voce).
+  revealSfidaGinoAnswer(hostId: string, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingSfidaGino);
+    if (!target?.pendingSfidaGino) return;
+    target.pendingSfidaGino.revealed = true;
+    this.broadcastSfidaGinoQuestion(target, io);
+  }
+
+  // Solo l'host decreta il premio: 2000 monete o 0, binario (nessuna via di
+  // mezzo, a differenza di Ocho/Particolare/Duck). Stessi moltiplicatori di
+  // stato degli altri minigiochi.
+  resolveSfidaGino(hostId: string, coinsAwarded: number, io: IOServer) {
+    const host = this.players.get(hostId);
+    if (!host?.isHost) return;
+    const target = [...this.players.values()].find((p) => p.pendingSfidaGino);
+    if (!target?.pendingSfidaGino) return;
+    if (coinsAwarded !== 0 && coinsAwarded !== SFIDA_GINO_REWARD) return;
+
+    target.pendingSfidaGino = null;
+
+    this.applyPassiveCardEffects(target);
+
+    let finalCoins = coinsAwarded;
+
+    const doubleIdx = target.statuses.findIndex((s) => s.type === "doubleWin");
+    if (doubleIdx !== -1) {
+      finalCoins *= 2;
+      target.statuses.splice(doubleIdx, 1);
+    }
+    const tripleIdx = target.statuses.findIndex((s) => s.type === "tripleWin");
+    if (tripleIdx !== -1) {
+      finalCoins *= 3;
+      target.statuses.splice(tripleIdx, 1);
+    }
+    const halveIdx = target.statuses.findIndex((s) => s.type === "halveWin");
+    if (halveIdx !== -1) {
+      finalCoins = Math.floor(finalCoins / 2);
+      target.statuses.splice(halveIdx, 1);
+    }
+
+    target.coins += finalCoins;
+    target.pendingWorldId = null;
+
+    io.emit("sfidaGino:ended", { playerId: target.id, coinsAwarded: finalCoins });
+    this.maybeAdvanceTurn(target, io);
     this.broadcastState(io);
   }
 
