@@ -135,7 +135,11 @@ export interface MyState extends PlayerSummary {
 
 export interface GameStateSnapshot {
   code: string;
-  phase: "lobby" | "playing";
+  // "finalRound": tutti i mondi hanno esaurito le domande, si è tornati alla
+  // Cittadella con un bonus di monete per un ultimo giro di shopping a testa.
+  // "ended": il giro finale è concluso, la partita è chiusa (vedi
+  // GameEndedPayload per la classifica finale).
+  phase: "lobby" | "playing" | "finalRound" | "ended";
   worlds: WorldDef[];
   packs: PackDef[];
   cardCatalog: CardDef[];
@@ -510,6 +514,24 @@ export interface SfidaGinoEndedPayload {
   coinsAwarded: number; // 2000 oppure 0
 }
 
+// Fine partita: quando TUTTI gli 8 mondi hanno esaurito le domande, si torna
+// alla Cittadella con un bonus di monete per un ultimo giro di shopping a
+// testa (un turno solo, per giocatore), poi si decreta il vincitore. Standings
+// già ordinate dal server: 1° posto per primo, ordinamento (1) carte diverse
+// possedute, (2) copie totali possedute, (3) monete rimaste.
+export interface GameEndedStandingEntry {
+  playerId: string;
+  distinctCards: number; // carte diverse possedute, su totalCardCount
+  totalCards: number; // copie totali possedute (somma di tutte le carte, doppioni inclusi)
+  coins: number;
+}
+
+export interface GameEndedPayload {
+  standings: GameEndedStandingEntry[];
+  winnerIds: string[]; // più di uno solo in caso di parità totale su tutti e 3 i criteri
+  totalCardCount: number; // CARD_CATALOG.length, per mostrare "23/25"
+}
+
 export type SurpriseEffectCode =
   | "moveForward"
   | "moveBackward"
@@ -708,4 +730,5 @@ export interface ServerToClientEvents {
   ) => void;
   "sfidaGino:question": (payload: SfidaGinoQuestionPayload) => void;
   "sfidaGino:ended": (payload: SfidaGinoEndedPayload) => void;
+  "game:ended": (payload: GameEndedPayload) => void;
 }

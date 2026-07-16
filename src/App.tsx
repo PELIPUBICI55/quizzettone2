@@ -7,6 +7,7 @@ import type {
   DuckEndedPayload,
   DuckGridStatePayload,
   DuckQuestionPayload,
+  GameEndedPayload,
   GameStateSnapshot,
   MinigameType,
   OchoStatePayload,
@@ -56,6 +57,7 @@ import { QuizMinigame } from "./components/QuizMinigame";
 import { QuizSpectatorView } from "./components/QuizSpectatorView";
 import { Cittadella } from "./screens/Cittadella";
 import { Lobby } from "./screens/Lobby";
+import { GameEndedScreen } from "./screens/GameEndedScreen";
 import { TurnOrderReveal } from "./screens/TurnOrderReveal";
 import { Board } from "./components/Board";
 import { DiceOverlay } from "./components/DiceOverlay";
@@ -71,6 +73,7 @@ import type { SfidaGinoCategoryId, SfidaGinoQuestionPayload, SfidaGinoEndedPaylo
 export default function App() {
   const [state, setState] = useState<GameStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gameEndedPayload, setGameEndedPayload] = useState<GameEndedPayload | null>(null);
   const [welcomeInfo, setWelcomeInfo] = useState<{ playerId: string; worldId: string } | null>(null);
   const [wheelInfo, setWheelInfo] = useState<WheelSpinPayload | null>(null);
   const [wheelResultInfo, setWheelResultInfo] = useState<{
@@ -172,7 +175,7 @@ export default function App() {
   const [chooseTargetInfo, setChooseTargetInfo] = useState<ChooseTargetPayload | null>(null);
   const [shieldPromptInfo, setShieldPromptInfo] = useState<{ message: string } | null>(null);
   const [showTurnOrder, setShowTurnOrder] = useState(false);
-  const prevPhase = useRef<"lobby" | "playing" | null>(null);
+  const prevPhase = useRef<"lobby" | "playing" | "finalRound" | "ended" | null>(null);
 
   useEffect(() => {
     const onState = (s: GameStateSnapshot) => {
@@ -476,6 +479,7 @@ export default function App() {
     const onShieldPrompt = (p: { message: string }) => setShieldPromptInfo(p);
     const onShieldUsed = () => setShieldPromptInfo(null);
     const onError = (p: { message: string }) => setError(p.message);
+    const onGameEnded = (p: GameEndedPayload) => setGameEndedPayload(p);
     const onKicked = () => {
       setState(null);
       setShowTurnOrder(false);
@@ -532,6 +536,7 @@ export default function App() {
     socket.on("board:useShieldPrompt", onShieldPrompt);
     socket.on("board:shieldUsed", onShieldUsed);
     socket.on("error:message", onError);
+    socket.on("game:ended", onGameEnded);
     socket.on("party:kicked", onKicked);
     socket.on("disconnect", onDisconnect);
 
@@ -584,6 +589,7 @@ export default function App() {
       socket.off("board:useShieldPrompt", onShieldPrompt);
       socket.off("board:shieldUsed", onShieldUsed);
       socket.off("error:message", onError);
+      socket.off("game:ended", onGameEnded);
       socket.off("party:kicked", onKicked);
       socket.off("disconnect", onDisconnect);
     };
@@ -654,6 +660,14 @@ export default function App() {
           </div>
         )}
         <Lobby state={state} />
+      </div>
+    );
+  }
+
+  if (state.phase === "ended" && gameEndedPayload) {
+    return (
+      <div className="app-shell">
+        <GameEndedScreen state={state} payload={gameEndedPayload} />
       </div>
     );
   }

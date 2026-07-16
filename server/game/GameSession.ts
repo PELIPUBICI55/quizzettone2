@@ -7,6 +7,7 @@ import type {
   CaroAmicoDomandaDef,
   CaroAmicoPersonaDef,
   ClientToServerEvents,
+  GameEndedPayload,
   GameStateSnapshot,
   OwnedCard,
   PawnToken,
@@ -269,6 +270,7 @@ const OCHO_VALID_REWARDS = [0, 50, 100];
 const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
 const BUZZ_REWARD = 100; // premio fisso: una sola domanda, un solo vincitore (o nessuno)
 const SFIDA_GINO_REWARD = 2000; // premio fisso e binario: 2000 o 0, deciso dall'host
+const FINAL_ROUND_BONUS_COINS = 1000; // bonus per il giro finale, quando tutti i mondi sono esauriti
 
 let playerIdCounter = 0;
 function nextPlayerId() {
@@ -293,7 +295,7 @@ export class GameSession {
   private players = new Map<string, InternalPlayer>();
   private turnOrder: string[] = [];
   private currentTurnIndex = 0;
-  private phase: "lobby" | "playing" = "lobby";
+  private phase: "lobby" | "playing" | "finalRound" | "ended" = "lobby";
   // Id delle top5 già giocate in questa partita: una volta pescata, una top5
   // non deve più poter ricapitare finché la partita è in corso (vedi
   // beginTop5 più sotto, e pickRandomCategory/pickRandomTop5InCategory in
@@ -320,6 +322,16 @@ export class GameSession {
   // mondo e i suoi 3 ponti (1 raggio + 2 anelli) restano disattivati per il
   // resto della partita. Vedi deactivateWorld più sotto.
   private deactivatedWorldIds = new Set<string>();
+  // Giro finale (fase "finalRound"): quando TUTTI gli 8 mondi sono
+  // disattivati, si torna alla Cittadella con un bonus di monete e ogni
+  // giocatore ha un solo turno di shopping, in questo ordine; chi lo ha già
+  // fatto è qui dentro. Vedi startFinalRound/finishGame più sotto.
+  private finalRoundPlayerIds: string[] = [];
+  private finalRoundDoneIds = new Set<string>();
+  private finalRoundIndex = 0;
+  // Ultima classifica finale calcolata (fase "ended"): rimandata a chi si
+  // ricollega dopo la fine della partita, vedi resendPendingScreens.
+  private lastGameEndedPayload: GameEndedPayload | null = null;
 
   constructor(code: string) {
     this.code = code;
@@ -398,6 +410,15 @@ export class GameSession {
   resendPendingScreens(playerId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
+
+    // Partita già conclusa (tutti i mondi esauriti + giro finale finito): chi
+    // si ricollega deve rivedere subito la classifica finale, non le
+    // schermate del gioco che nel frattempo non esistono più.
+    if (this.phase === "ended" && this.lastGameEndedPayload) {
+      io.to(player.socketId).emit("game:ended", this.lastGameEndedPayload);
+      return;
+    }
+
     if (player.awaitingWheelStart && player.pendingWorldId) {
       io.to(player.socketId).emit("world:welcome", {
         playerId: player.id,
@@ -650,6 +671,14 @@ export class GameSession {
   }
 
   private currentTurnPlayerId(): string | null {
+    if (this.phase === "finalRound") {
+      // Il giro finale ha un proprio ordine (solo i giocatori connessi
+      // all'inizio del giro, vedi startFinalRound) e un proprio indice
+      // (finalRoundIndex), indipendente da turnOrder/currentTurnIndex: così
+      // un eventuale giocatore disconnesso non blocca mai il giro finale.
+      if (this.finalRoundPlayerIds.length === 0) return null;
+      return this.finalRoundPlayerIds[this.finalRoundIndex % this.finalRoundPlayerIds.length];
+    }
     if (this.turnOrder.length === 0) return null;
     return this.turnOrder[this.currentTurnIndex % this.turnOrder.length];
   }
@@ -1663,6 +1692,23 @@ export class GameSession {
     }
     if (!player.pendingShop) return;
     player.pendingShop = false;
+
+    if (this.phase === "finalRound") {
+      // Giro finale: un solo turno di shopping a testa, nell'ordine dei
+      // turni già stabilito. Quando tutti quelli connessi a inizio giro
+      // l'hanno fatto, si chiude la partita e si decreta il vincitore.
+      this.finalRoundDoneIds.add(playerId);
+      if (this.finalRoundDoneIds.size >= this.finalRoundPlayerIds.length) {
+        this.finishGame(io);
+      } else {
+        this.finalRoundIndex += 1;
+        const next = this.players.get(this.currentTurnPlayerId() ?? "");
+        if (next) next.pendingShop = true;
+        this.broadcastState(io);
+      }
+      return;
+    }
+
     this.advanceTurnAndHandleSkips(io);
     this.broadcastState(io);
   }
@@ -1699,6 +1745,99 @@ export class GameSession {
       message: `Le domande di ${worldLabel} sono finite: il mondo e i suoi ponti sono stati disattivati per il resto della partita.`,
     });
 
+    this.broadcastState(io);
+
+    // Se anche l'ULTIMO mondo si è appena disattivato, non c'è più nessun
+    // mondo raggiungibile: si passa al giro finale.
+    if (this.deactivatedWorldIds.size >= WORLDS.length && this.phase === "playing") {
+      this.startFinalRound(io);
+    }
+  }
+
+  // Tutti i mondi hanno esaurito le domande: si torna alla Cittadella con un
+  // bonus di monete, e ogni giocatore ha un solo turno finale per comprare
+  // pacchetti (nell'ordine dei turni già stabilito). Alla fine dell'ultimo
+  // turno si decreta il vincitore (vedi finishGame).
+  private startFinalRound(io: IOServer) {
+    this.phase = "finalRound";
+
+    for (const p of this.players.values()) {
+      // tutti tornano alla Cittadella (chi era su un mondo appena
+      // disattivato ci è già stato riportato sopra; qui copriamo comunque
+      // ogni caso residuo) e si azzera qualsiasi minigioco/scelta pendente:
+      // non c'è più nulla da risolvere, si passa dritti allo shopping finale.
+      p.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
+      p.coins += FINAL_ROUND_BONUS_COINS;
+      p.pendingRoll = null;
+      p.pendingWorldId = null;
+      p.awaitingWheelStart = false;
+      p.awaitingQuizStart = false;
+      p.pendingQuestion = null;
+      p.pendingShop = false;
+    }
+
+    this.finalRoundPlayerIds = [...this.turnOrder].filter((id) => {
+      const p = this.players.get(id);
+      return !!p && p.connected;
+    });
+    this.finalRoundDoneIds = new Set();
+    this.finalRoundIndex = 0;
+
+    io.emit("error:message", {
+      message: `Tutti i mondi sono stati esauriti! Si torna alla Cittadella con ${FINAL_ROUND_BONUS_COINS} monete bonus per l'ultimo giro di shopping, un turno a testa.`,
+    });
+
+    if (this.finalRoundPlayerIds.length === 0) {
+      // nessun giocatore connesso: non dovrebbe succedere, ma per sicurezza
+      // chiudiamo comunque la partita invece di restare bloccati.
+      this.finishGame(io);
+      return;
+    }
+
+    const first = this.players.get(this.finalRoundPlayerIds[0]);
+    if (first) first.pendingShop = true;
+
+    this.broadcastState(io);
+  }
+
+  // Chiude il giro finale (o l'intera partita, se non ci sono giocatori
+  // connessi): calcola la classifica finale e decreta il vincitore.
+  // Criteri, in ordine: (1) più carte DIVERSE possedute, (2) a parità, più
+  // copie totali possedute, (3) a ulteriore parità, più monete rimaste.
+  private finishGame(io: IOServer) {
+    this.phase = "ended";
+
+    const standings = [...this.players.values()].map((p) => {
+      const distinctCards = new Set(p.collection.map((c) => c.cardId)).size;
+      return {
+        playerId: p.id,
+        distinctCards,
+        totalCards: p.collection.length,
+        coins: p.coins,
+      };
+    });
+
+    standings.sort((a, b) => {
+      if (b.distinctCards !== a.distinctCards) return b.distinctCards - a.distinctCards;
+      if (b.totalCards !== a.totalCards) return b.totalCards - a.totalCards;
+      return b.coins - a.coins;
+    });
+
+    const top = standings[0];
+    const winnerIds = top
+      ? standings
+          .filter(
+            (s) =>
+              s.distinctCards === top.distinctCards &&
+              s.totalCards === top.totalCards &&
+              s.coins === top.coins
+          )
+          .map((s) => s.playerId)
+      : [];
+
+    const payload: GameEndedPayload = { standings, winnerIds, totalCardCount: CARD_CATALOG.length };
+    this.lastGameEndedPayload = payload;
+    io.emit("game:ended", payload);
     this.broadcastState(io);
   }
 
