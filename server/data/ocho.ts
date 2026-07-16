@@ -430,37 +430,38 @@ export const OCHO_GAMES: OchoGameInternal[] = [
 ];
 
 // Pesca una categoria a caso tra quelle che hanno ancora almeno un gioco
-// "fresco" (non escluso). Se tutte le categorie sono esaurite, ricomincia
-// daccapo ignorando l'esclusione invece di bloccare il gioco (stesso
-// pattern di pickRandomCategory in server/data/top5.ts).
+// "fresco" (non escluso). Un gioco già giocato non può più essere ripescato:
+// se TUTTE le categorie sono esaurite restituisce null, e sarà GameSession a
+// disattivare il mondo "deserto".
 export function pickRandomOchoCategory(
   excludedIds: ReadonlySet<string> = new Set()
-): OchoCategoryDef {
+): OchoCategoryDef | null {
   const categoriesWithFreshGame = OCHO_CATEGORIES.filter((c) =>
     OCHO_GAMES.some((g) => g.categoryId === c.id && !excludedIds.has(g.id))
   );
-  if (categoriesWithFreshGame.length > 0) {
-    return categoriesWithFreshGame[Math.floor(Math.random() * categoriesWithFreshGame.length)];
-  }
-  const activeCategories = OCHO_CATEGORIES.filter((c) =>
-    OCHO_GAMES.some((g) => g.categoryId === c.id)
-  );
-  const pool = activeCategories.length > 0 ? activeCategories : OCHO_CATEGORIES;
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (categoriesWithFreshGame.length === 0) return null;
+  return categoriesWithFreshGame[Math.floor(Math.random() * categoriesWithFreshGame.length)];
 }
 
 // Pesca un gioco della categoria indicata, escludendo quelli già giocati in
-// questa partita. Se la categoria non ha più giochi "freschi", ricade su
-// quelli già giocati della stessa categoria (mazzo esaurito, non blocca mai
-// il gioco).
+// questa partita. Non ripiega mai su giochi già usati: se la categoria non
+// ha più giochi freschi (non dovrebbe succedere se si è passati da
+// pickRandomOchoCategory) restituisce null.
 export function pickRandomOchoGameInCategory(
   categoryId: string,
   excludedIds: ReadonlySet<string> = new Set()
-): OchoGameInternal {
-  const inCategory = OCHO_GAMES.filter((g) => g.categoryId === categoryId);
-  const fresh = inCategory.filter((g) => !excludedIds.has(g.id));
-  const pool = fresh.length > 0 ? fresh : inCategory.length > 0 ? inCategory : OCHO_GAMES;
-  return pool[Math.floor(Math.random() * pool.length)];
+): OchoGameInternal | null {
+  const fresh = OCHO_GAMES.filter((g) => g.categoryId === categoryId && !excludedIds.has(g.id));
+  if (fresh.length === 0) return null;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+// true se OGNI categoria ha esaurito i suoi giochi freschi: il mondo
+// "deserto" va disattivato.
+export function isOchoWorldExhausted(excludedIds: ReadonlySet<string>): boolean {
+  return OCHO_CATEGORIES.every((c) =>
+    OCHO_GAMES.filter((g) => g.categoryId === c.id).every((g) => excludedIds.has(g.id))
+  );
 }
 
 // Rimescola l'ordine delle 9 risposte di un gioco (Fisher-Yates) prima di

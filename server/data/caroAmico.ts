@@ -317,6 +317,16 @@ export function pickRandomPersonaExcluding(excludeId: string | null): CaroAmicoP
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
 
-export function pickRandomDomanda(): CaroAmicoDomandaDef {
-  return CARO_AMICO_DOMANDE[Math.floor(Math.random() * CARO_AMICO_DOMANDE.length)];
+// Pesca una domanda mai uscita in questa partita. Non ripiega mai su
+// domande già usate: se sono finite tutte e 23 restituisce null, e sarà
+// GameSession a disattivare il mondo "officina".
+export function pickRandomDomanda(excludedIds: ReadonlySet<string>): CaroAmicoDomandaDef | null {
+  const fresh = CARO_AMICO_DOMANDE.filter((d) => !excludedIds.has(d.id));
+  if (fresh.length === 0) return null;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+// true se sono uscite tutte e 23: il mondo "officina" va disattivato.
+export function isCaroAmicoWorldExhausted(excludedIds: ReadonlySet<string>): boolean {
+  return CARO_AMICO_DOMANDE.every((d) => excludedIds.has(d.id));
 }

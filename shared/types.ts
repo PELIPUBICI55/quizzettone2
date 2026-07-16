@@ -145,6 +145,7 @@ export interface GameStateSnapshot {
   turnOrder: string[];
   currentTurnPlayerId: string | null;
   positions: Record<string, BoardPosition>;
+  deactivatedWorldIds: string[]; // mondi le cui domande sono finite: mondo + suoi 3 ponti non più attraversabili
 }
 
 // Duplico qui solo la "forma" dell'arco (senza dipendere da shared/board.ts)

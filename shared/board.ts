@@ -73,6 +73,26 @@ export function edgeById(edgeId: string): BoardEdge | undefined {
   return BOARD_EDGES.find((e) => e.id === edgeId);
 }
 
+// Come neighborsOf, ma esclude i vicini raggiungibili solo attraverso un
+// mondo disattivato (le sue domande sono finite: il mondo e i suoi 3 ponti -
+// 1 raggio verso la Cittadella + 2 anelli verso i mondi vicini - non sono
+// più attraversabili). Un ponte è "spento" se uno dei due nodi che collega è
+// un mondo disattivato. Usata sia server-side (movimento) sia client-side
+// (scelta della direzione), per restare sempre coerenti.
+export function availableNeighborsOf(
+  nodeId: string,
+  deactivatedWorldIds: ReadonlySet<string> | readonly string[]
+): { edgeId: string; neighborId: string }[] {
+  const deactivated =
+    deactivatedWorldIds instanceof Set ? deactivatedWorldIds : new Set(deactivatedWorldIds);
+  return BOARD_EDGES.filter(
+    (e) => (e.a === nodeId || e.b === nodeId) && !deactivated.has(e.a) && !deactivated.has(e.b)
+  ).map((e) => ({
+    edgeId: e.id,
+    neighborId: e.a === nodeId ? e.b : e.a,
+  }));
+}
+
 // Le caselle "imprevisto" di un ponte sono indici fissi contati a partire da
 // edge.a. La "progress" di un giocatore invece è sempre contata a partire dal
 // nodo da cui è partito (che può essere sia edge.a sia edge.b, a seconda del

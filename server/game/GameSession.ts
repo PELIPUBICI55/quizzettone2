@@ -32,30 +32,32 @@ import {
   QuizQuestionInternal,
 } from "../data/questions.js";
 import { drawRandomSurprise } from "../data/surprises.js";
-import { pickRandomCategory, pickRandomTop5InCategory } from "../data/top5.js";
+import { pickRandomCategory, pickRandomTop5InCategory, isTop5WorldExhausted } from "../data/top5.js";
 import { CARO_AMICO_PERSONE } from "../../shared/caroAmicoPersone.js";
-import { pickRandomPersonaExcluding, pickRandomDomanda } from "../data/caroAmico.js";
-import { pickRandomTctQuestions, TctQuestionInternal } from "../data/tct.js";
-import { pickRandomOchoCategory, pickRandomOchoGameInCategory, shuffleOchoGame } from "../data/ocho.js";
+import { pickRandomPersonaExcluding, pickRandomDomanda, isCaroAmicoWorldExhausted } from "../data/caroAmico.js";
+import { pickRandomTctQuestions, isTctWorldExhausted, TctQuestionInternal } from "../data/tct.js";
+import { pickRandomOchoCategory, pickRandomOchoGameInCategory, shuffleOchoGame, isOchoWorldExhausted } from "../data/ocho.js";
 import {
   pickRandomDuckCategory,
   getDuckQuestions,
   shuffleDuckQuestions,
   shuffleDuckPrizes,
+  isDuckWorldExhausted,
   DuckQuestionInternal,
 } from "../data/duck.js";
 import {
   pickRandomParticolareCategory,
   pickRandomParticolareItems,
+  isParticolareWorldExhausted,
 } from "../data/particolare.js";
-import { pickRandomBuzzItem } from "../data/buzz.js";
+import { pickRandomBuzzCategory, pickRandomBuzzItem, isBuzzWorldExhausted } from "../data/buzz.js";
 import {
   pickRandomSfidaGinoCategory,
   pickRandomSfidaGinoFlags,
   pickRandomSfidaGinoCapitals,
+  isSfidaGinoWorldExhausted,
 } from "../data/sfidaGino.js";
-import { SFIDA_GINO_CATEGORIES } from "../../shared/sfidaGinoCategories.js";
-import { BOARD_EDGES, edgeById, neighborsOf, absoluteTileIndex } from "../../shared/board.js";
+import { BOARD_EDGES, edgeById, neighborsOf, availableNeighborsOf, absoluteTileIndex } from "../../shared/board.js";
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -313,6 +315,11 @@ export class GameSession {
   private pendingBuzz: PendingBuzz | null = null;
   private playedSfidaGinoFlagIds = new Set<string>();
   private playedSfidaGinoCapitalIds = new Set<string>();
+  private playedCaroAmicoDomandaIds = new Set<string>();
+  // Mondi le cui domande sono TUTTE finite (ogni categoria esaurita): il
+  // mondo e i suoi 3 ponti (1 raggio + 2 anelli) restano disattivati per il
+  // resto della partita. Vedi deactivateWorld più sotto.
+  private deactivatedWorldIds = new Set<string>();
 
   constructor(code: string) {
     this.code = code;
@@ -734,6 +741,7 @@ export class GameSession {
       turnOrder: this.turnOrder,
       currentTurnPlayerId: this.currentTurnPlayerId(),
       positions,
+      deactivatedWorldIds: [...this.deactivatedWorldIds],
       players: [...this.players.values()].map((p) => ({
         id: p.id,
         name: p.name,
@@ -929,10 +937,10 @@ export class GameSession {
     const pos = player.boardPosition;
 
     if (pos.onNode) {
-      const neighbors = neighborsOf(pos.nodeId);
+      const neighbors = availableNeighborsOf(pos.nodeId, this.deactivatedWorldIds);
       const chosen =
         neighbors.find((n) => n.neighborId === direction) ?? neighbors[0];
-      if (!chosen) return; // nodo isolato, non dovrebbe succedere
+      if (!chosen) return; // nodo isolato (o tutti i vicini disattivati), non dovrebbe succedere
       const edge = edgeById(chosen.edgeId);
       if (!edge) return;
       if (roll > edge.length) {
@@ -1071,7 +1079,7 @@ export class GameSession {
   private dispatchSelfAdvance(player: InternalPlayer, steps: number, io: IOServer) {
     const pos = player.boardPosition;
     if (pos.onNode) {
-      const neighbors = neighborsOf(pos.nodeId);
+      const neighbors = availableNeighborsOf(pos.nodeId, this.deactivatedWorldIds);
       if (neighbors.length === 0) {
         this.broadcastState(io);
         return;
@@ -1367,7 +1375,7 @@ export class GameSession {
 
       io.to(player.socketId).emit("board:chooseTarget", { kind: "player", prompt, options });
     } else if (choice.kind === "advanceThreeDirection") {
-      const neighbors = neighborsOf(player.boardPosition.nodeId);
+      const neighbors = availableNeighborsOf(player.boardPosition.nodeId, this.deactivatedWorldIds);
       const options = neighbors.map((n) => ({ id: n.neighborId, label: this.nodeLabel(n.neighborId) }));
       io.to(player.socketId).emit("board:chooseTarget", {
         kind: "player",
@@ -1512,7 +1520,7 @@ export class GameSession {
     if (choice.kind === "advanceThreeDirection") {
       player.pendingChoice = null;
       const originNodeId = player.boardPosition.nodeId;
-      const neighbors = neighborsOf(originNodeId);
+      const neighbors = availableNeighborsOf(originNodeId, this.deactivatedWorldIds);
       const chosen = neighbors.find((n) => n.neighborId === optionId);
       if (chosen) {
         this.resolveDirectionalAdvance(
@@ -1665,6 +1673,35 @@ export class GameSession {
     io.emit("world:welcome", { playerId: player.id, worldId });
   }
 
+  // Disattiva un mondo per il resto della partita: succede quando TUTTE le
+  // sue categorie hanno esaurito le domande fresche (i vari isXWorldExhausted
+  // nei rispettivi server/data/*.ts, controllati a fine di ogni resolveX). Il
+  // mondo e i suoi 3 ponti (1 raggio verso la Cittadella + 2 anelli verso i
+  // mondi vicini) diventano impraticabili per il resto della partita: chi ci
+  // si trova sopra (nodo o ponte) in quel momento torna alla Cittadella.
+  private deactivateWorld(worldId: string, io: IOServer) {
+    if (this.deactivatedWorldIds.has(worldId)) return;
+    this.deactivatedWorldIds.add(worldId);
+
+    const bridgeEdgeIds = new Set(neighborsOf(worldId).map((n) => n.edgeId));
+    for (const p of this.players.values()) {
+      const pos = p.boardPosition;
+      const onDeactivatedNode = pos.onNode && pos.nodeId === worldId;
+      const onDeactivatedBridge = !pos.onNode && !!pos.edgeId && bridgeEdgeIds.has(pos.edgeId);
+      if (onDeactivatedNode || onDeactivatedBridge) {
+        p.boardPosition = { nodeId: CITTADELLA_ID, onNode: true };
+      }
+    }
+
+    const world = WORLDS.find((w) => w.id === worldId);
+    const worldLabel = world ? `${world.emoji} ${world.name}` : worldId;
+    io.emit("error:message", {
+      message: `Le domande di ${worldLabel} sono finite: il mondo e i suoi ponti sono stati disattivati per il resto della partita.`,
+    });
+
+    this.broadcastState(io);
+  }
+
   beginMinigame(playerId: string, io: IOServer) {
     const player = this.players.get(playerId);
     if (!player) return;
@@ -1767,7 +1804,16 @@ export class GameSession {
   // playedTop5Ids, così non potrà ripresentarsi finché dura la partita.
   private beginTop5(player: InternalPlayer, io: IOServer) {
     const category = pickRandomCategory(this.playedTop5Ids);
-    const def = pickRandomTop5InCategory(category.id, this.playedTop5Ids);
+    if (!category) {
+      // Non dovrebbe succedere (il movimento impedisce di atterrare su un
+      // mondo già disattivato), ma per sicurezza gestiamo comunque il caso.
+      this.deactivateWorld("vulcano", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+    const def = pickRandomTop5InCategory(category.id, this.playedTop5Ids)!;
     this.playedTop5Ids.add(def.id);
     player.pendingTop5 = {
       def,
@@ -1895,6 +1941,9 @@ export class GameSession {
 
     io.emit("top5:ended", { playerId: target.id, won, coinsAwarded });
     this.maybeAdvanceTurn(target, io);
+    if (isTop5WorldExhausted(this.playedTop5Ids)) {
+      this.deactivateWorld("vulcano", io);
+    }
     this.broadcastState(io);
   }
 
@@ -1931,8 +1980,16 @@ export class GameSession {
   // caso, mostra l'animazione della ruota, poi rivela la persona pescata a
   // tutti.
   private drawCaroAmicoRound(player: InternalPlayer, io: IOServer) {
+    const domanda = pickRandomDomanda(this.playedCaroAmicoDomandaIds);
+    if (!domanda) {
+      this.deactivateWorld("officina", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+    this.playedCaroAmicoDomandaIds.add(domanda.id);
     const persona = pickRandomPersonaExcluding(player.caroAmicoSelfId);
-    const domanda = pickRandomDomanda();
     player.pendingCaroAmico = { domanda, persona, revealed: false };
     const durationMs = 2600;
 
@@ -2043,6 +2100,9 @@ export class GameSession {
 
     io.emit("caroamico:ended", { playerId: target.id, won, coinsAwarded });
     this.maybeAdvanceTurn(target, io);
+    if (isCaroAmicoWorldExhausted(this.playedCaroAmicoDomandaIds)) {
+      this.deactivateWorld("officina", io);
+    }
     this.broadcastState(io);
   }
   // Avvia il minigioco OCHO ALLA BOMBA (mondo "deserto"): pesca una
@@ -2052,7 +2112,14 @@ export class GameSession {
   // l'animazione della ruota verticale, poi rivela la categoria a tutti.
   private beginOcho(player: InternalPlayer, io: IOServer) {
     const category = pickRandomOchoCategory(this.playedOchoIds);
-    const rawGame = pickRandomOchoGameInCategory(category.id, this.playedOchoIds);
+    if (!category) {
+      this.deactivateWorld("deserto", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+    const rawGame = pickRandomOchoGameInCategory(category.id, this.playedOchoIds)!;
     this.playedOchoIds.add(rawGame.id);
 
     const { answers, bombIndex } = shuffleOchoGame(rawGame);
@@ -2194,6 +2261,9 @@ export class GameSession {
 
     io.emit("ocho:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
+    if (isOchoWorldExhausted(this.playedOchoIds)) {
+      this.deactivateWorld("deserto", io);
+    }
     this.broadcastState(io);
   }
 
@@ -2203,6 +2273,13 @@ export class GameSession {
   // verticale e rivela la categoria a tutti.
   private beginDuck(player: InternalPlayer, io: IOServer) {
     const category = pickRandomDuckCategory(this.playedDuckCategoryIds);
+    if (!category) {
+      this.deactivateWorld("ghiacciaia", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
     this.playedDuckCategoryIds.add(category.id);
     const rawQuestions = getDuckQuestions(category.id);
     const questions = shuffleDuckQuestions(rawQuestions);
@@ -2413,16 +2490,26 @@ export class GameSession {
 
     io.emit("duck:ended", { playerId: player.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(player, io);
+    if (isDuckWorldExhausted(this.playedDuckCategoryIds)) {
+      this.deactivateWorld("ghiacciaia", io);
+    }
     this.broadcastState(io);
   }
 
   // Avvia GRANDIOSO QUIZ PARTICOLARE (mondo "foresta"): pesca una categoria
-  // a caso fra le 5 (Animali/Serie TV/Film/Musica/Videogiochi, senza vincolo
-  // di non ripetizione: sono solo 5 e le partite durano a lungo) e 2 item
-  // distinti al suo interno (questi sì, mai ripetuti nella stessa partita).
+  // a caso fra le 5 (Animali/Serie TV/Film/Musica/Videogiochi), solo tra
+  // quelle che hanno ancora almeno 2 item freschi, e pesca 2 item distinti
+  // al suo interno, mai ripetuti nella stessa partita.
   private beginParticolare(player: InternalPlayer, io: IOServer) {
-    const category = pickRandomParticolareCategory();
-    const rawItems = pickRandomParticolareItems(category.id, 2, this.playedParticolareItemIds);
+    const category = pickRandomParticolareCategory(2, this.playedParticolareItemIds);
+    if (!category) {
+      this.deactivateWorld("foresta", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+    const rawItems = pickRandomParticolareItems(category.id, 2, this.playedParticolareItemIds)!;
     for (const item of rawItems) this.playedParticolareItemIds.add(item.id);
 
     const items: PendingParticolareItem[] = rawItems.map((item) => {
@@ -2584,18 +2671,28 @@ export class GameSession {
 
     io.emit("particolare:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
+    if (isParticolareWorldExhausted(2, this.playedParticolareItemIds)) {
+      this.deactivateWorld("foresta", io);
+    }
     this.broadcastState(io);
   }
 
   // Avvia IL GRANDIOSO BUZZ (mondo "cieli"): pesca una categoria a caso fra
-  // le 5 (stesse di Grandioso Quiz Particolare, nessun vincolo di non
-  // ripetizione) e UNA sola domanda al suo interno (mai ripetuta nella
+  // le 5 (stesse di Grandioso Quiz Particolare, ma pool ed esclusione
+  // separati) e UNA sola domanda al suo interno (mai ripetuta nella
   // stessa partita, pool dedicato e distinto da quello di Particolare).
   // A differenza degli altri minigiochi lo stato non vive sull'InternalPlayer
   // che ha fatto scattare il round, ma sulla sessione: giocano tutti.
   private beginBuzz(player: InternalPlayer, io: IOServer) {
-    const category = pickRandomParticolareCategory();
-    const rawItem = pickRandomBuzzItem(category.id, this.playedBuzzItemIds);
+    const category = pickRandomBuzzCategory(this.playedBuzzItemIds);
+    if (!category) {
+      this.deactivateWorld("cieli", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
+    const rawItem = pickRandomBuzzItem(category.id, this.playedBuzzItemIds)!;
     this.playedBuzzItemIds.add(rawItem.id);
 
     const item: PendingParticolareItem =
@@ -2760,41 +2857,42 @@ export class GameSession {
 
     io.emit("buzz:ended", { winnerId, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(triggeringPlayer, io);
+    if (isBuzzWorldExhausted(this.playedBuzzItemIds)) {
+      this.deactivateWorld("cieli", io);
+    }
     this.broadcastState(io);
   }
 
   // Avvia SFIDA GINO (mondo "rovine"): pesca una fra le 2 categorie
-  // (Indovina la Capitale / Indovina la Bandiera) e si gioca AL MEGLIO DI 3
-  // domande all'interno di quella stessa categoria, mai ripetute nella stessa
-  // partita. Se la categoria pescata è "capitali" ma il dataset non è
-  // ancora stato popolato, ripiega su "bandiere" così il mondo resta
-  // comunque giocabile nel frattempo.
+  // (Indovina la Capitale / Indovina la Bandiera), solo tra quelle che hanno
+  // ancora abbastanza elementi freschi, e si gioca AL MEGLIO DI 3 domande
+  // all'interno di quella stessa categoria, mai ripetute nella stessa
+  // partita.
   private beginSfidaGino(player: InternalPlayer, io: IOServer) {
-    let category = pickRandomSfidaGinoCategory();
     const ROUND_COUNT = 3;
+    const category = pickRandomSfidaGinoCategory(
+      ROUND_COUNT,
+      this.playedSfidaGinoFlagIds,
+      this.playedSfidaGinoCapitalIds
+    );
+    if (!category) {
+      this.deactivateWorld("rovine", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
 
     let rounds: PendingSfidaGinoRound[];
 
     if (category.id === "capitali") {
       const capitals = pickRandomSfidaGinoCapitals(ROUND_COUNT, this.playedSfidaGinoCapitalIds);
-      if (capitals.length > 0) {
-        for (const c of capitals) this.playedSfidaGinoCapitalIds.add(c.id);
-        rounds = capitals.map((c) => ({
-          itemId: c.id,
-          prompt: { kind: "text", text: c.question },
-          answer: c.answer,
-        }));
-      } else {
-        // Dataset capitali vuoto: ripiega su bandiere.
-        category = SFIDA_GINO_CATEGORIES.find((c) => c.id === "bandiere")!;
-        const flags = pickRandomSfidaGinoFlags(ROUND_COUNT, this.playedSfidaGinoFlagIds);
-        for (const f of flags) this.playedSfidaGinoFlagIds.add(f.id);
-        rounds = flags.map((f) => ({
-          itemId: f.id,
-          prompt: { kind: "image", imageUrl: f.imageUrl },
-          answer: f.answer,
-        }));
-      }
+      for (const c of capitals) this.playedSfidaGinoCapitalIds.add(c.id);
+      rounds = capitals.map((c) => ({
+        itemId: c.id,
+        prompt: { kind: "text", text: c.question },
+        answer: c.answer,
+      }));
     } else {
       const flags = pickRandomSfidaGinoFlags(ROUND_COUNT, this.playedSfidaGinoFlagIds);
       for (const f of flags) this.playedSfidaGinoFlagIds.add(f.id);
@@ -2929,6 +3027,9 @@ export class GameSession {
 
     io.emit("sfidaGino:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
+    if (isSfidaGinoWorldExhausted(3, this.playedSfidaGinoFlagIds, this.playedSfidaGinoCapitalIds)) {
+      this.deactivateWorld("rovine", io);
+    }
     this.broadcastState(io);
   }
 
@@ -2941,6 +3042,16 @@ export class GameSession {
   // faccia da sfidante. Altrimenti il tuffo nell'abisso salta e il turno
   // prosegue normale.
   private beginTct(player: InternalPlayer, io: IOServer) {
+    if (isTctWorldExhausted(TCT_QUESTION_COUNT, this.playedTctQuestionIds)) {
+      // Non dovrebbe succedere (il movimento impedisce di atterrare su un
+      // mondo già disattivato), ma per sicurezza controlliamo comunque PRIMA
+      // di scalare la quota d'ingresso a nessuno.
+      this.deactivateWorld("abisso", io);
+      player.pendingWorldId = null;
+      this.maybeAdvanceTurn(player, io);
+      this.broadcastState(io);
+      return;
+    }
     const turnPlayerQualifies = player.coins >= TCT_ENTRY_FEE;
     const otherQualifyingCount = [...this.players.values()].filter(
       (p) => p.id !== player.id && p.connected && p.coins >= TCT_ENTRY_FEE
@@ -3134,6 +3245,9 @@ export class GameSession {
     if (trigger) {
       trigger.pendingWorldId = null;
       this.maybeAdvanceTurn(trigger, io);
+    }
+    if (isTctWorldExhausted(TCT_QUESTION_COUNT, this.playedTctQuestionIds)) {
+      this.deactivateWorld("abisso", io);
     }
     this.broadcastState(io);
   }

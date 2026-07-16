@@ -430,16 +430,25 @@ export const TCT_DOMANDE: TctQuestionInternal[] = [
 // questa partita (vedi GameSession.playedTctQuestionIds). Se il mazzo
 // disponibile scende sotto `count`, si ricomincia ignorando l'esclusione
 // (mazzo esaurito) invece di bloccare il gioco.
+// Non ripiega mai su domande già usate: se non ce ne sono abbastanza di
+// fresche restituisce un array vuoto (sarà GameSession a disattivare il
+// mondo "abisso" in quel caso).
 export function pickRandomTctQuestions(
   count: number,
   excludedIds: ReadonlySet<string>
 ): TctQuestionInternal[] {
-  let pool = TCT_DOMANDE.filter((q) => !excludedIds.has(q.id));
-  if (pool.length < count) pool = TCT_DOMANDE;
+  const pool = TCT_DOMANDE.filter((q) => !excludedIds.has(q.id));
+  if (pool.length < count) return [];
   const shuffled = [...pool];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled.slice(0, count);
+}
+
+// true se non ci sono più abbastanza domande fresche per un round completo:
+// il mondo "abisso" va disattivato.
+export function isTctWorldExhausted(count: number, excludedIds: ReadonlySet<string>): boolean {
+  return TCT_DOMANDE.filter((q) => !excludedIds.has(q.id)).length < count;
 }

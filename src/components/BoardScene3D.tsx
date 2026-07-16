@@ -66,6 +66,7 @@ function FloatingIsland({
   isCenter,
   pawns,
   highlighted,
+  deactivated,
   onSelect,
   name,
   emoji,
@@ -77,6 +78,7 @@ function FloatingIsland({
   isCenter?: boolean;
   pawns?: { key: string; color: string; isCurrent: boolean; name: string; token: PawnTokenId; angle: number; offsetR: number }[];
   highlighted?: boolean;
+  deactivated?: boolean; // domande finite: isola spenta, non più selezionabile
   onSelect?: () => void;
   name: string;
   emoji: string;
@@ -138,32 +140,33 @@ function FloatingIsland({
           <meshStandardMaterial color="#f2ecff" roughness={0.9} />
         </mesh>
       ))}
-      {/* piattaforma superiore */}
+      {/* piattaforma superiore: spenta e desaturata se il mondo è disattivato */}
       <mesh position={[0, 0, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[size * 0.62, size * 0.68, size * 0.22, 8]} />
-        <meshStandardMaterial color={color} roughness={0.75} flatShading />
+        <meshStandardMaterial color={deactivated ? "#4a4a52" : color} roughness={0.9} flatShading />
       </mesh>
-      {/* anello di energia magica: diventa un bersaglio pulsante e cliccabile quando evidenziato */}
+      {/* anello di energia magica: diventa un bersaglio pulsante e cliccabile quando evidenziato,
+          spento e non cliccabile se il mondo è disattivato (domande finite) */}
       <mesh
         position={[0, -size * 0.08, 0]}
         rotation={[Math.PI / 2, 0, 0]}
-        scale={highlighted ? 1.25 : 1}
+        scale={highlighted && !deactivated ? 1.25 : 1}
         onClick={
-          onSelect
+          onSelect && !deactivated
             ? (e) => {
                 e.stopPropagation();
                 onSelect();
               }
             : undefined
         }
-        onPointerOver={onSelect ? () => (document.body.style.cursor = "pointer") : undefined}
-        onPointerOut={onSelect ? () => (document.body.style.cursor = "auto") : undefined}
+        onPointerOver={onSelect && !deactivated ? () => (document.body.style.cursor = "pointer") : undefined}
+        onPointerOut={onSelect && !deactivated ? () => (document.body.style.cursor = "auto") : undefined}
       >
-        <torusGeometry args={[size * 0.68, highlighted ? 0.12 : 0.05, 8, 32]} />
+        <torusGeometry args={[size * 0.68, highlighted && !deactivated ? 0.12 : 0.05, 8, 32]} />
         <meshStandardMaterial
-          color={highlighted ? "#4ade80" : "#e879f9"}
-          emissive={highlighted ? "#4ade80" : "#e879f9"}
-          emissiveIntensity={highlighted ? 2 : 1.3}
+          color={deactivated ? "#3a3a40" : highlighted ? "#4ade80" : "#e879f9"}
+          emissive={deactivated ? "#000000" : highlighted ? "#4ade80" : "#e879f9"}
+          emissiveIntensity={deactivated ? 0 : highlighted ? 2 : 1.3}
           toneMapped={false}
         />
       </mesh>
@@ -223,13 +226,14 @@ function FloatingIsland({
       <Billboard position={[0, size * (isCenter ? 1.05 : 0.55), 0]}>
         <Text
           fontSize={size * 0.24}
-          color="#f2d98a"
+          color={deactivated ? "#8a8a90" : "#f2d98a"}
           anchorX="center"
           anchorY="middle"
           outlineWidth={size * 0.018}
           outlineColor="#1a0f10"
         >
           {emoji} {name}
+          {deactivated ? " (esaurito)" : ""}
         </Text>
       </Billboard>
     </group>
@@ -243,6 +247,7 @@ function Bridge3D({
   radiusA,
   radiusB,
   surprises,
+  deactivated,
 }: {
   a: [number, number, number];
   b: [number, number, number];
@@ -250,6 +255,7 @@ function Bridge3D({
   radiusA: number;
   radiusB: number;
   surprises: number[];
+  deactivated?: boolean; // ponte verso/da un mondo con domande finite: spento, non attraversabile
 }) {
   const fullDx = b[0] - a[0];
   const fullDz = b[2] - a[2];
@@ -297,18 +303,20 @@ function Bridge3D({
 
   return (
     <group>
-      {/* tavole di legno del ponte, ben distanziate tra loro */}
+      {/* tavole di legno del ponte, ben distanziate tra loro: spente e
+          desaturate se il ponte è disattivato (nessun bagliore imprevisto,
+          il ponte non è più attraversabile) */}
       {planks.map((p, i) => {
-        const isSurprise = surprises.includes(i + 1);
+        const isSurprise = !deactivated && surprises.includes(i + 1);
         return (
           <group key={i}>
             <mesh position={[p.x, p.y, p.z]} rotation={[0, angle, 0]} castShadow receiveShadow>
               <boxGeometry args={[2, 0.16, (dist / length) * 0.62]} />
               <meshStandardMaterial
-                color={isSurprise ? "#2f9e6f" : "#8a5a30"}
+                color={deactivated ? "#454549" : isSurprise ? "#2f9e6f" : "#8a5a30"}
                 emissive={isSurprise ? "#2f9e6f" : "#000000"}
                 emissiveIntensity={isSurprise ? 0.5 : 0}
-                roughness={0.85}
+                roughness={0.9}
                 flatShading
                 toneMapped={false}
               />
@@ -328,9 +336,9 @@ function Bridge3D({
         );
       })}
 
-      {/* corrimano di corda */}
-      <Line points={railSide(1)} color="#c9a875" lineWidth={2.5} />
-      <Line points={railSide(-1)} color="#c9a875" lineWidth={2.5} />
+      {/* corrimano di corda: spento se il ponte è disattivato */}
+      <Line points={railSide(1)} color={deactivated ? "#5c5c62" : "#c9a875"} lineWidth={2.5} />
+      <Line points={railSide(-1)} color={deactivated ? "#5c5c62" : "#c9a875"} lineWidth={2.5} />
 
       {postTs.flatMap((t, i) => {
         const dip = Math.sin(t * Math.PI) * 0.35;
@@ -344,11 +352,11 @@ function Bridge3D({
                 [cx + perpx * 0.85 * sign, baseY + 0.1, cz + perpz * 0.85 * sign],
                 [cx + perpx * railOffset * sign, baseY + railHeight, cz + perpz * railOffset * sign],
               ]}
-              color="#6b4423"
+              color={deactivated ? "#3f3f44" : "#6b4423"}
               lineWidth={1.5}
             />
-            {/* lanterna magica ogni due paletti, per un tocco fantasy */}
-            {i % 2 === 0 && (
+            {/* lanterna magica ogni due paletti, spenta se il ponte è disattivato */}
+            {i % 2 === 0 && !deactivated && (
               <mesh position={[cx + perpx * railOffset * sign, baseY + railHeight + 0.15, cz + perpz * railOffset * sign]}>
                 <sphereGeometry args={[0.09, 8, 8]} />
                 <meshStandardMaterial
@@ -781,6 +789,8 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
         {state.board.edges.map((edge) => {
           const a = nodePos3D(edge.a, state.worlds);
           const b = nodePos3D(edge.b, state.worlds);
+          const deactivated =
+            state.deactivatedWorldIds.includes(edge.a) || state.deactivatedWorldIds.includes(edge.b);
           return (
             <Bridge3D
               key={edge.id}
@@ -790,6 +800,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
               radiusA={islandRadius(edge.a)}
               radiusB={islandRadius(edge.b)}
               surprises={edge.surprises}
+              deactivated={deactivated}
             />
           );
         })}
@@ -816,6 +827,7 @@ export function BoardScene3D({ state, directionChoice, onSelectDirection }: Prop
             key={w.id}
             position={nodePos3D(w.id, state.worlds)}
             color={w.colorFrom}
+            deactivated={state.deactivatedWorldIds.includes(w.id)}
             size={WORLD_SIZE}
             seed={i + 1}
             name={w.name}

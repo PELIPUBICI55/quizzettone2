@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { BoardPosition, CardRarity, GameStateSnapshot } from "../../shared/types";
-import { neighborsOf } from "../../shared/board";
+import { availableNeighborsOf } from "../../shared/board";
 import { socket } from "../socket";
 import { BoardScene3D } from "./BoardScene3D";
 import { CardView } from "./CardView";
@@ -32,7 +32,7 @@ export function Board({ state }: Props) {
   const myPos: BoardPosition = state.positions[state.me.id];
   const currentTurnPlayer = state.players.find((p) => p.id === state.currentTurnPlayerId);
 
-  const neighbors = myPos?.onNode ? neighborsOf(myPos.nodeId) : [];
+  const neighbors = myPos?.onNode ? availableNeighborsOf(myPos.nodeId, state.deactivatedWorldIds) : [];
   const needsDirection = myPos?.onNode && neighbors.length > 1;
 
   const rollDice = () => socket.emit("board:roll");

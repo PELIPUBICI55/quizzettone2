@@ -535,10 +535,16 @@ export const DUCK_GRID_PRIZES = [500, 100, 100, 50, 50, 50, 50, 40, 40];
 // pickRandomOchoCategory/pickRandomCategory).
 export function pickRandomDuckCategory(
   excludedIds: ReadonlySet<string> = new Set()
-): DuckCategoryDef {
+): DuckCategoryDef | null {
   const fresh = DUCK_CATEGORIES.filter((c) => !excludedIds.has(c.id));
-  const pool = fresh.length > 0 ? fresh : DUCK_CATEGORIES;
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (fresh.length === 0) return null;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+// true se OGNI categoria è già stata giocata: il mondo "ghiacciaia" va
+// disattivato.
+export function isDuckWorldExhausted(excludedIds: ReadonlySet<string>): boolean {
+  return DUCK_CATEGORIES.every((c) => excludedIds.has(c.id));
 }
 
 // Ritorna le 4 domande (nell'ordine originale) della categoria indicata.

@@ -413,39 +413,53 @@ export const SFIDA_GINO_CAPITALS: SfidaGinoCapitalItem[] = [
   { id: "cap-nauru", question: "Qual è la capitale di Nauru?", answer: "Yaren" },
 ];
 
-export function pickRandomSfidaGinoCategory() {
-  return SFIDA_GINO_CATEGORIES[Math.floor(Math.random() * SFIDA_GINO_CATEGORIES.length)];
-}
-
-export function pickRandomSfidaGinoFlag(excludedIds: ReadonlySet<string>): SfidaGinoFlagItem {
-  let candidates = SFIDA_GINO_FLAGS.filter((f) => !excludedIds.has(f.id));
-  if (candidates.length === 0) candidates = SFIDA_GINO_FLAGS;
-  return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-export function pickRandomSfidaGinoCapital(excludedIds: ReadonlySet<string>): SfidaGinoCapitalItem | null {
-  if (SFIDA_GINO_CAPITALS.length === 0) return null;
-  let candidates = SFIDA_GINO_CAPITALS.filter((c) => !excludedIds.has(c.id));
-  if (candidates.length === 0) candidates = SFIDA_GINO_CAPITALS;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+// Pesca una fra le 2 categorie (capitali/bandiere), ma solo tra quelle che
+// hanno ancora almeno `count` elementi freschi (si gioca al meglio di 3).
+// Un elemento già giocato non può più essere ripescato: se NESSUNA delle 2
+// categorie ha più abbastanza elementi freschi restituisce null, e sarà
+// GameSession a disattivare il mondo "rovine".
+export function pickRandomSfidaGinoCategory(
+  count: number,
+  excludedFlagIds: ReadonlySet<string>,
+  excludedCapitalIds: ReadonlySet<string>
+) {
+  const withEnoughFresh = SFIDA_GINO_CATEGORIES.filter((c) => {
+    if (c.id === "capitali") {
+      return SFIDA_GINO_CAPITALS.filter((x) => !excludedCapitalIds.has(x.id)).length >= count;
+    }
+    return SFIDA_GINO_FLAGS.filter((x) => !excludedFlagIds.has(x.id)).length >= count;
+  });
+  if (withEnoughFresh.length === 0) return null;
+  return withEnoughFresh[Math.floor(Math.random() * withEnoughFresh.length)];
 }
 
 // SFIDA GINO si gioca al meglio di 3: servono `count` bandiere/capitali
-// distinti tra loro (oltre che, quando possibile, distinti da quelli già
-// usati in partita). Se il pool escluso non basta per `count` elementi
-// diversi, si ripiega sull'intero pool (stesso fallback delle funzioni
-// singole già esistenti).
+// distinti tra loro E mai ripetuti rispetto a quelli già usati in partita.
+// Non ripiegano mai sul pool intero: se non ce ne sono abbastanza di
+// freschi (non dovrebbe succedere se si è passati da
+// pickRandomSfidaGinoCategory) restituiscono un array vuoto.
 export function pickRandomSfidaGinoFlags(count: number, excludedIds: ReadonlySet<string>): SfidaGinoFlagItem[] {
-  let candidates = SFIDA_GINO_FLAGS.filter((f) => !excludedIds.has(f.id));
-  if (candidates.length < count) candidates = SFIDA_GINO_FLAGS;
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  const fresh = SFIDA_GINO_FLAGS.filter((f) => !excludedIds.has(f.id));
+  if (fresh.length < count) return [];
+  const shuffled = [...fresh].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
 
 export function pickRandomSfidaGinoCapitals(count: number, excludedIds: ReadonlySet<string>): SfidaGinoCapitalItem[] {
-  if (SFIDA_GINO_CAPITALS.length === 0) return [];
-  let candidates = SFIDA_GINO_CAPITALS.filter((c) => !excludedIds.has(c.id));
-  if (candidates.length < count) candidates = SFIDA_GINO_CAPITALS;
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  const fresh = SFIDA_GINO_CAPITALS.filter((c) => !excludedIds.has(c.id));
+  if (fresh.length < count) return [];
+  const shuffled = [...fresh].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
+}
+
+// true se NESSUNA delle 2 categorie ha più abbastanza elementi freschi: il
+// mondo "rovine" va disattivato.
+export function isSfidaGinoWorldExhausted(
+  count: number,
+  excludedFlagIds: ReadonlySet<string>,
+  excludedCapitalIds: ReadonlySet<string>
+): boolean {
+  const freshFlags = SFIDA_GINO_FLAGS.filter((x) => !excludedFlagIds.has(x.id)).length;
+  const freshCapitals = SFIDA_GINO_CAPITALS.filter((x) => !excludedCapitalIds.has(x.id)).length;
+  return freshFlags < count && freshCapitals < count;
 }

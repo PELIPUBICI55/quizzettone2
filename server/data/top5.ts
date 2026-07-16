@@ -5,36 +5,42 @@ export const TOP5_BANK: Top5Def[] = [
   {
     id: "top5-animali-case-mondo",
     title: "Animali più presenti nelle case (nel mondo)",
+    category: "animali",
     answers: ["Gatti", "Cani", "Pesci", "Roditori (criceti, conigli, ecc.)", "Uccelli"],
     source: "Stime globali sul possesso di animali domestici (Spiegato.com e altre fonti comparate)",
   },
   {
     id: "top5-razze-cane-mondo",
     title: "Razze di cane più diffuse nel mondo",
+    category: "animali",
     answers: ["Bulldog Francese", "Labrador Retriever", "Golden Retriever", "Pastore Tedesco", "Barboncino"],
     source: "American Kennel Club (AKC), classifica 2023",
   },
   {
     id: "top5-nazioni-rateo-pet",
     title: "Nazioni con rateo animali domestici per famiglia più alto",
+    category: "animali",
     answers: ["Ungheria", "Italia", "Francia", "Germania", "Spagna"],
     source: "Indagine GfK/Censis su 22 Paesi, riportata da MyPersonalTrainer",
   },
   {
     id: "top5-animali-cucinati",
     title: "Animali più cucinati al mondo",
+    category: "animali",
     answers: ["Pollo", "Maiale", "Manzo", "Pecora", "Capra"],
     source: "OCSE-FAO (Organizzazione per la Cooperazione e lo Sviluppo Economico / FAO)",
   },
   {
     id: "top5-animali-italia",
     title: "Animali più presenti in Italia",
+    category: "animali",
     answers: ["Pesci", "Gatti", "Cani", "Uccelli", "Rettili e anfibi"],
     source: "Rapporto Assalco-Zoomark 2026",
   },
   {
     id: "top5-animali-zoo",
     title: "Animali più presenti negli zoo",
+    category: "animali",
     answers: ["Leoni", "Elefanti", "Giraffe", "Tigri", "Scimmie/Primati"],
     source:
       "Non esiste una classifica statistica ufficiale unica: elenco basato sul consenso comune tra le principali guide di zoo nel mondo",
@@ -451,41 +457,40 @@ export function pickRandomTop5(): Top5Def {
 }
 
 // Categorie effettivamente "attive", cioè con almeno una top5 pronta nel
-// mazzo. Per ora sono geografia, scienze, serie tv, film, musica,
-// videogiochi e sport; le figurine di animali (1-6) sono ancora in attesa
-// di essere assegnate a una loro categoria.
+// mazzo (geografia, scienze, serie tv, film, musica, videogiochi, sport,
+// animali).
 //
 // excludedIds permette di escludere le top5 già giocate in questa partita
 // (vedi GameSession.playedTop5Ids, in server/game/GameSession.ts): una
-// categoria è "attiva" solo se ha ancora almeno una top5 NON esclusa. Se
-// tutte le top5 di tutte le categorie sono già state giocate (mazzo
-// esaurito), si ricomincia daccapo ignorando l'esclusione invece di
-// bloccare il gioco.
-export function pickRandomCategory(excludedIds: ReadonlySet<string> = new Set()): Top5CategoryDef {
+// categoria è "attiva" solo se ha ancora almeno una top5 NON esclusa. Una
+// top5 già giocata non può più essere ripescata: se TUTTE le categorie sono
+// esaurite questa funzione restituisce null, e sarà GameSession a
+// disattivare il mondo "vulcano" (nessun ripiego che ripete domande).
+export function pickRandomCategory(excludedIds: ReadonlySet<string> = new Set()): Top5CategoryDef | null {
   const categoriesWithFreshTop5 = TOP5_CATEGORIES.filter((c) =>
     TOP5_BANK.some((t) => t.category === c.id && !excludedIds.has(t.id))
   );
-  if (categoriesWithFreshTop5.length > 0) {
-    return categoriesWithFreshTop5[Math.floor(Math.random() * categoriesWithFreshTop5.length)];
-  }
-  // mazzo esaurito (o nessuna categoria ancora popolata): fallback ignorando l'esclusione
-  const activeCategories = TOP5_CATEGORIES.filter((c) =>
-    TOP5_BANK.some((t) => t.category === c.id)
-  );
-  const pool = activeCategories.length > 0 ? activeCategories : TOP5_CATEGORIES;
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (categoriesWithFreshTop5.length === 0) return null;
+  return categoriesWithFreshTop5[Math.floor(Math.random() * categoriesWithFreshTop5.length)];
 }
 
 // Pesca una top5 della categoria indicata, escludendo quelle già giocate in
-// questa partita. Se la categoria non ha più top5 "fresche" (mazzo di
-// quella categoria esaurito) ricade su quelle già giocate della stessa
-// categoria, così il gioco non si blocca mai.
+// questa partita. Non ripiega mai su top5 già usate: se la categoria non ha
+// più fresche (non dovrebbe succedere se si è passati da pickRandomCategory,
+// che offre solo categorie ancora fresche) restituisce null.
 export function pickRandomTop5InCategory(
   categoryId: string,
   excludedIds: ReadonlySet<string> = new Set()
-): Top5Def {
-  const inCategory = TOP5_BANK.filter((t) => t.category === categoryId);
-  const fresh = inCategory.filter((t) => !excludedIds.has(t.id));
-  const pool = fresh.length > 0 ? fresh : inCategory.length > 0 ? inCategory : TOP5_BANK;
-  return pool[Math.floor(Math.random() * pool.length)];
+): Top5Def | null {
+  const fresh = TOP5_BANK.filter((t) => t.category === categoryId && !excludedIds.has(t.id));
+  if (fresh.length === 0) return null;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+// true se OGNI categoria ha esaurito le sue top5 fresche: il mondo "vulcano"
+// va disattivato.
+export function isTop5WorldExhausted(excludedIds: ReadonlySet<string>): boolean {
+  return TOP5_CATEGORIES.every((c) =>
+    TOP5_BANK.filter((t) => t.category === c.id).every((t) => excludedIds.has(t.id))
+  );
 }

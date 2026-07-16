@@ -5,6 +5,7 @@ import type { Top5CategoryDef } from "./types.js";
 // vere e proprie (server/data/top5.ts) restano server-side per non spoilerare
 // le risposte a chi gioca.
 export const TOP5_CATEGORIES: Top5CategoryDef[] = [
+  { id: "animali", name: "Animali", emoji: "🐾" },
   { id: "geografia", name: "Geografia", emoji: "🌍" },
   { id: "scienze", name: "Scienze", emoji: "🔬" },
   { id: "serietv", name: "Serie TV", emoji: "📺" },

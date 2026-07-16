@@ -1,4 +1,6 @@
 import type { ParticolareImageItem, ParticolareYoutubeItem } from "./particolare.js";
+import { PARTICOLARE_CATEGORIES } from "../../shared/particolareCategories.js";
+import type { ParticolareCategoryDef } from "../../shared/types.js";
 
 // File generato: contenuti reali per il mondo "cieli" (IL GRANDIOSO BUZZ).
 // Stesse 5 categorie di Grandioso Quiz Particolare (Animali, Serie TV, Film,
@@ -138,18 +140,38 @@ function poolForCategory(categoryId: string): (ParticolareImageItem | Particolar
   }
 }
 
-// Pesca UNA sola domanda dalla categoria (IL GRANDIOSO BUZZ ha una sola
-// domanda per round, a differenza delle 2 di Grandioso Quiz Particolare),
-// evitando quelle già giocate in questa partita; se il pool escluso esaurisce
-// le opzioni, si ignora l'esclusione (stesso pattern usato altrove).
+// Pesca una categoria fra quelle che hanno ancora almeno una domanda fresca
+// (IL GRANDIOSO BUZZ ha una sola domanda per round). Pool ed esclusione
+// (playedBuzzItemIds) SEPARATI da quelli di Grandioso Quiz Particolare: le
+// due categorie condividono solo nomi/emoji, non i contenuti. Se tutte e 5
+// sono esaurite restituisce null, e sarà GameSession a disattivare "cieli".
+export function pickRandomBuzzCategory(
+  excludedIds: ReadonlySet<string>
+): ParticolareCategoryDef | null {
+  const withFresh = PARTICOLARE_CATEGORIES.filter(
+    (c) => poolForCategory(c.id).some((item) => !excludedIds.has(item.id))
+  );
+  if (withFresh.length === 0) return null;
+  return withFresh[Math.floor(Math.random() * withFresh.length)];
+}
+
+// Pesca UNA sola domanda dalla categoria, evitando quelle già giocate in
+// questa partita. Non ripiega mai su domande già usate: se la categoria non
+// ha più domande fresche (non dovrebbe succedere se si è passati da
+// pickRandomBuzzCategory) restituisce null.
 export function pickRandomBuzzItem(
   categoryId: string,
   excludedIds: ReadonlySet<string>
-): ParticolareImageItem | ParticolareYoutubeItem {
-  const pool = poolForCategory(categoryId);
-  let candidates = pool.filter((item) => !excludedIds.has(item.id));
-  if (candidates.length === 0) {
-    candidates = pool;
-  }
-  return candidates[Math.floor(Math.random() * candidates.length)];
+): ParticolareImageItem | ParticolareYoutubeItem | null {
+  const fresh = poolForCategory(categoryId).filter((item) => !excludedIds.has(item.id));
+  if (fresh.length === 0) return null;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+// true se OGNI categoria ha esaurito le sue domande fresche: il mondo
+// "cieli" va disattivato.
+export function isBuzzWorldExhausted(excludedIds: ReadonlySet<string>): boolean {
+  return PARTICOLARE_CATEGORIES.every((c) =>
+    poolForCategory(c.id).every((item) => excludedIds.has(item.id))
+  );
 }

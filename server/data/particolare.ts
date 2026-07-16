@@ -172,8 +172,28 @@ export const SERIE_TV_ITEMS: ParticolareYoutubeItem[] = [
   { id: "serie-tv-power-rangers", answer: "Power Rangers", videoId: "c1MTJn4F3QI" },
 ];
 
-export function pickRandomParticolareCategory(): ParticolareCategoryDef {
-  return PARTICOLARE_CATEGORIES[Math.floor(Math.random() * PARTICOLARE_CATEGORIES.length)];
+// Pesca una categoria fra quelle che hanno ancora almeno `count` item
+// freschi (Grandioso Quiz Particolare ne pesca 2 a round). Una domanda già
+// giocata non può più essere ripescata: se NESSUNA categoria ha più
+// abbastanza item freschi restituisce null, e sarà GameSession a
+// disattivare il mondo "foresta".
+export function pickRandomParticolareCategory(
+  count: number,
+  excludedIds: ReadonlySet<string>
+): ParticolareCategoryDef | null {
+  const withEnoughFresh = PARTICOLARE_CATEGORIES.filter(
+    (c) => poolForCategory(c.id).filter((item) => !excludedIds.has(item.id)).length >= count
+  );
+  if (withEnoughFresh.length === 0) return null;
+  return withEnoughFresh[Math.floor(Math.random() * withEnoughFresh.length)];
+}
+
+// true se NESSUNA categoria ha più `count` item freschi: il mondo "foresta"
+// va disattivato.
+export function isParticolareWorldExhausted(count: number, excludedIds: ReadonlySet<string>): boolean {
+  return PARTICOLARE_CATEGORIES.every(
+    (c) => poolForCategory(c.id).filter((item) => !excludedIds.has(item.id)).length < count
+  );
 }
 
 function poolForCategory(categoryId: string): (ParticolareImageItem | ParticolareYoutubeItem)[] {
@@ -194,18 +214,16 @@ function poolForCategory(categoryId: string): (ParticolareImageItem | Particolar
 }
 
 // Pesca `count` elementi distinti dalla categoria, evitando quelli già
-// giocati in questa partita (stesso pattern di excludedIds usato altrove:
-// se il pool escluso esaurisce le opzioni, si ignora l'esclusione).
+// giocati in questa partita. Non ripiega mai su item già usati: se non ce ne
+// sono abbastanza di freschi (non dovrebbe succedere se si è passati da
+// pickRandomParticolareCategory) restituisce null.
 export function pickRandomParticolareItems(
   categoryId: string,
   count: number,
   excludedIds: ReadonlySet<string>
-): (ParticolareImageItem | ParticolareYoutubeItem)[] {
-  const pool = poolForCategory(categoryId);
-  let candidates = pool.filter((item) => !excludedIds.has(item.id));
-  if (candidates.length < count) {
-    candidates = pool;
-  }
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+): (ParticolareImageItem | ParticolareYoutubeItem)[] | null {
+  const fresh = poolForCategory(categoryId).filter((item) => !excludedIds.has(item.id));
+  if (fresh.length < count) return null;
+  const shuffled = [...fresh].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
