@@ -1,5 +1,6 @@
 import type { GameStateSnapshot, PawnToken } from "../../shared/types";
 import { socket } from "../socket";
+import { CoinsLegendMenu } from "../components/CoinsLegendMenu";
 
 interface Props {
   state: GameStateSnapshot;
@@ -25,10 +26,16 @@ export function Lobby({ state }: Props) {
   return (
     <div className="join-screen">
       <div className="join-panel panel" style={{ maxWidth: 520 }}>
-        <h1 style={{ fontSize: "2.2rem" }}>In attesa...</h1>
-        <p className="subtitle">
-          Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
-        </p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
+          <div>
+            <h1 style={{ fontSize: "2.2rem" }}>In attesa...</h1>
+            <p className="subtitle" style={{ marginBottom: 0 }}>
+              Codice partita: <strong style={{ color: "var(--gold-soft)" }}>{state.code}</strong>
+            </p>
+          </div>
+          <CoinsLegendMenu state={state} />
+        </div>
+        <div style={{ marginBottom: "1.5rem" }} />
 
         {isHost && (
           <div

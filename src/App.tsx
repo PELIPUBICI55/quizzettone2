@@ -65,6 +65,7 @@ import { CollectionMenu } from "./components/CollectionMenu";
 import { FullCollectionMenu } from "./components/FullCollectionMenu";
 import { PartyMenu } from "./components/PartyMenu";
 import { SaveGameButton } from "./components/SaveGameButton";
+import { CoinsLegendMenu } from "./components/CoinsLegendMenu";
 import { StatusMenu } from "./components/StatusMenu";
 import { CardView } from "./components/CardView";
 import type { ParticolareCategoryId, ParticolareQuestionPayload, ParticolareEndedPayload } from "../shared/types";
@@ -763,6 +764,7 @@ export default function App() {
         <StatusMenu state={state} />
         <CollectionMenu state={state} />
         <FullCollectionMenu state={state} />
+        <CoinsLegendMenu state={state} />
         <SaveGameButton state={state} />
       </div>
 
