@@ -15,21 +15,21 @@ interface Props {
 // anche questo testo a mano.
 const WORLD_REWARD_INFO: Record<string, string> = {
   vulcano:
-    "Indovina 5 elementi di una classifica (al massimo 3 errori concessi). Vittoria: 100 monete. Sconfitta: 0.",
+    "Indovina 5 elementi di una classifica (3 vite). Vittoria: 100 monete.",
   abisso:
     "Torneo a punti tra tutti i partecipanti con almeno 100 monete: si paga un ingresso di 100 monete per entrare nel montepremi. 4 domande, punti a chi risponde correttamente più in fretta. Chi totalizza più punti si prende l'intero montepremi (diviso in caso di parità); gli altri non riprendono nulla dell'ingresso pagato.",
   foresta:
-    "Rispondi a voce a 2 domande. L'host assegna 0, 50 o 100 monete in base a quante ne indovini.",
+    "Rispondi a 2 domande. 0, 50 o 100 monete in base a quante ne indovini.",
   deserto:
-    "Scopri le caselle di una griglia 3×3 evitando la bomba nascosta. L'host assegna 0, 50 o 100 monete in base a quante caselle sicure hai scoperto.",
+    "Scopri le caselle di una griglia 3×3 evitando la bomba nascosta. 0, 50 o 100 monete in base a quante caselle sicure hai scoperto.",
   ghiacciaia:
-    "Quiz automatico: serve arrivare a 3 risposte corrette prima di sbagliarne 2. Se ti qualifichi, scegli una casella su una griglia di 9 premi nascosti (40, 40, 50, 50, 50, 50, 100, 100 o 500 monete). Se fallisci il quiz: 0.",
+    "Quiz automatico: serve arrivare a 3 risposte corrette prima di sbagliarne 2. Se ti qualifichi, scegli una casella su una griglia di 9 premi nascosti (40, 40, 50, 50, 50, 50, 100, 100 o 500 monete). ",
   cieli:
-    "Una sola domanda per tutta la sala: chi preme il buzzer e risponde correttamente per primo vince 100 monete. Tutti gli altri: 0.",
+    "Una sola domanda per tutta la sala: chi preme il buzzer e risponde correttamente per primo vince 100 monete.",
   rovine:
-    "Rispondi a voce al meglio di 6 domande della stessa categoria (capitali o bandiere). Premio fisso e binario deciso dall'host: 2000 monete oppure 0, nessuna via di mezzo.",
+    "Rispondi a turno contro gino al meglio di 6 domande della stessa categoria. 2000 monete se batti gino, 150 se pareggi, una pacca sulla spalla se perdi.",
   officina:
-    "Rispondi a una domanda su un'altra persona del gruppo. Vittoria: 80 monete. Sconfitta: 0.",
+    "Rispondi a una domanda su un'altra persona del gruppo. Vittoria: 80 monete.",
 };
 
 export function CoinsLegendMenu({ state }: Props) {
