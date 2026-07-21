@@ -381,7 +381,8 @@ export const SFIDA_GINO_CAPITALS: SfidaGinoCapitalItem[] = [
 ];
 
 // Pesca una fra le 2 categorie (capitali/bandiere), ma solo tra quelle che
-// hanno ancora almeno `count` elementi freschi (si gioca al meglio di 3).
+// hanno ancora almeno `count` elementi freschi (si gioca al meglio di N,
+// N deciso da GameSession tramite SFIDA_GINO_ROUND_COUNT).
 // Un elemento già giocato non può più essere ripescato: se NESSUNA delle 2
 // categorie ha più abbastanza elementi freschi restituisce null, e sarà
 // GameSession a disattivare il mondo "rovine".
@@ -400,7 +401,8 @@ export function pickRandomSfidaGinoCategory(
   return withEnoughFresh[Math.floor(Math.random() * withEnoughFresh.length)];
 }
 
-// SFIDA GINO si gioca al meglio di 3: servono `count` bandiere/capitali
+// SFIDA GINO si gioca al meglio di N (vedi SFIDA_GINO_ROUND_COUNT in
+// GameSession): servono `count` bandiere/capitali
 // distinti tra loro E mai ripetuti rispetto a quelli già usati in partita.
 // Non ripiegano mai sul pool intero: se non ce ne sono abbastanza di
 // freschi (non dovrebbe succedere se si è passati da

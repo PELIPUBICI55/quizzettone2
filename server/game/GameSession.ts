@@ -195,16 +195,17 @@ interface PendingSfidaGinoRound {
 // Stato di un round di SFIDA GINO (mondo "rovine") in corso. Gioca solo il
 // giocatore di turno, a voce, come in Grandioso Quiz Particolare: una ruota
 // estrae una fra 2 categorie (Indovina la Capitale / Indovina la Bandiera),
-// poi si gioca AL MEGLIO DI 3 domande all'interno di quella stessa categoria
-// (stesso pattern di questionIndex/revealed di Particolare, ma con 3 item
-// invece di 2). Premio fisso e binario: 2000 monete oppure 0, deciso
-// dall'host solo alla fine, in base a quante ne ha indovinate a voce.
+// poi si gioca AL MEGLIO DI 6 domande all'interno di quella stessa categoria
+// (stesso pattern di questionIndex/revealed di Particolare, ma con 6 item
+// invece di 2, vedi SFIDA_GINO_ROUND_COUNT). Premio fisso e binario: 2000
+// monete oppure 0, deciso dall'host solo alla fine, in base a quante ne ha
+// indovinate a voce.
 interface PendingSfidaGino {
   categoryId: SfidaGinoCategoryId;
   categoryName: string;
   categoryEmoji: string;
-  rounds: PendingSfidaGinoRound[]; // esattamente 3
-  questionIndex: number; // 0, 1 oppure 2
+  rounds: PendingSfidaGinoRound[]; // esattamente SFIDA_GINO_ROUND_COUNT
+  questionIndex: number; // da 0 a SFIDA_GINO_ROUND_COUNT - 1
   revealed: boolean; // true dopo che l'host ha svelato la risposta della domanda corrente
 }
 
@@ -321,6 +322,7 @@ const OCHO_VALID_REWARDS = [0, 50, 100];
 const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
 const BUZZ_REWARD = 100; // premio fisso: una sola domanda, un solo vincitore (o nessuno)
 const SFIDA_GINO_REWARD = 2000; // premio fisso e binario: 2000 o 0, deciso dall'host
+const SFIDA_GINO_ROUND_COUNT = 6; // quante domande al round (al meglio di N)
 const FINAL_ROUND_BONUS_COINS = 1000; // bonus per il giro finale, quando tutti i mondi sono esauriti
 
 let playerIdCounter = 0;
@@ -3167,13 +3169,12 @@ export class GameSession {
 
   // Avvia SFIDA GINO (mondo "rovine"): pesca una fra le 2 categorie
   // (Indovina la Capitale / Indovina la Bandiera), solo tra quelle che hanno
-  // ancora abbastanza elementi freschi, e si gioca AL MEGLIO DI 3 domande
-  // all'interno di quella stessa categoria, mai ripetute nella stessa
-  // partita.
+  // ancora abbastanza elementi freschi, e si gioca AL MEGLIO DI
+  // SFIDA_GINO_ROUND_COUNT domande all'interno di quella stessa categoria,
+  // mai ripetute nella stessa partita.
   private beginSfidaGino(player: InternalPlayer, io: IOServer) {
-    const ROUND_COUNT = 3;
     const category = pickRandomSfidaGinoCategory(
-      ROUND_COUNT,
+      SFIDA_GINO_ROUND_COUNT,
       this.playedSfidaGinoFlagIds,
       this.playedSfidaGinoCapitalIds
     );
@@ -3188,7 +3189,7 @@ export class GameSession {
     let rounds: PendingSfidaGinoRound[];
 
     if (category.id === "capitali") {
-      const capitals = pickRandomSfidaGinoCapitals(ROUND_COUNT, this.playedSfidaGinoCapitalIds);
+      const capitals = pickRandomSfidaGinoCapitals(SFIDA_GINO_ROUND_COUNT, this.playedSfidaGinoCapitalIds);
       for (const c of capitals) this.playedSfidaGinoCapitalIds.add(c.id);
       rounds = capitals.map((c) => ({
         itemId: c.id,
@@ -3196,7 +3197,7 @@ export class GameSession {
         answer: c.answer,
       }));
     } else {
-      const flags = pickRandomSfidaGinoFlags(ROUND_COUNT, this.playedSfidaGinoFlagIds);
+      const flags = pickRandomSfidaGinoFlags(SFIDA_GINO_ROUND_COUNT, this.playedSfidaGinoFlagIds);
       for (const f of flags) this.playedSfidaGinoFlagIds.add(f.id);
       rounds = flags.map((f) => ({
         itemId: f.id,
@@ -3266,8 +3267,8 @@ export class GameSession {
 
   // Solo l'host può passare alla domanda successiva (dopo che il giocatore
   // di turno ha risposto a voce alla domanda corrente). Si gioca al meglio
-  // di 3: si avanza fino alla terza, poi l'host assegna 2000 o 0 in base a
-  // quante ne ha indovinate.
+  // di SFIDA_GINO_ROUND_COUNT: si avanza fino all'ultima, poi l'host
+  // assegna 2000 o 0 in base a quante ne ha indovinate.
   nextSfidaGinoQuestion(hostId: string, io: IOServer) {
     const host = this.players.get(hostId);
     if (!host?.isHost) return;
@@ -3292,9 +3293,9 @@ export class GameSession {
   }
 
   // Solo l'host decreta il premio finale per l'intero minigioco (al meglio
-  // di 3): 2000 monete o 0, binario (nessuna via di mezzo, a differenza di
-  // Ocho/Particolare/Duck). Stessi moltiplicatori di stato degli altri
-  // minigiochi.
+  // di SFIDA_GINO_ROUND_COUNT): 2000 monete o 0, binario (nessuna via di
+  // mezzo, a differenza di Ocho/Particolare/Duck). Stessi moltiplicatori di
+  // stato degli altri minigiochi.
   resolveSfidaGino(hostId: string, coinsAwarded: number, io: IOServer) {
     const host = this.players.get(hostId);
     if (!host?.isHost) return;
@@ -3329,7 +3330,13 @@ export class GameSession {
 
     io.emit("sfidaGino:ended", { playerId: target.id, coinsAwarded: finalCoins });
     this.maybeAdvanceTurn(target, io);
-    if (isSfidaGinoWorldExhausted(3, this.playedSfidaGinoFlagIds, this.playedSfidaGinoCapitalIds)) {
+    if (
+      isSfidaGinoWorldExhausted(
+        SFIDA_GINO_ROUND_COUNT,
+        this.playedSfidaGinoFlagIds,
+        this.playedSfidaGinoCapitalIds
+      )
+    ) {
       this.deactivateWorld("rovine", io);
     }
     this.broadcastState(io);

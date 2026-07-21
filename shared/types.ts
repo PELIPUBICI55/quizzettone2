@@ -510,7 +510,7 @@ export interface SfidaGinoQuestionPayload {
   categoryName: string;
   categoryEmoji: string;
   questionIndex: number; // 0, 1 oppure 2
-  totalQuestions: number; // sempre 3 (si gioca al meglio di 3)
+  totalQuestions: number; // sempre SFIDA_GINO_ROUND_COUNT (si gioca al meglio di N)
   prompt: SfidaGinoPrompt;
   revealed: boolean;
   answer: string | null; // valorizzata solo quando revealed è true
