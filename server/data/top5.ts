@@ -11,14 +11,14 @@ export const TOP5_BANK: Top5Def[] = [
   },
   {
     id: "top5-razze-cane-mondo",
-    title: "Razze di cane più diffuse nel mondo",
+    title: "Razze di cane più diffuse in america",
     category: "animali",
     answers: ["Bulldog Francese", "Labrador Retriever", "Golden Retriever", "Pastore Tedesco", "Barboncino"],
     source: "American Kennel Club (AKC), classifica 2023",
   },
   {
     id: "top5-nazioni-rateo-pet",
-    title: "Nazioni con rateo animali domestici per famiglia più alto",
+    title: "Nazioni con rateo animali domestici per famiglia più alto in europa",
     category: "animali",
     answers: ["Ungheria", "Italia", "Francia", "Germania", "Spagna"],
     source: "Indagine GfK/Censis su 22 Paesi, riportata da MyPersonalTrainer",
@@ -36,14 +36,6 @@ export const TOP5_BANK: Top5Def[] = [
     category: "animali",
     answers: ["Pesci", "Gatti", "Cani", "Uccelli", "Rettili e anfibi"],
     source: "Rapporto Assalco-Zoomark 2026",
-  },
-  {
-    id: "top5-animali-zoo",
-    title: "Animali più presenti negli zoo",
-    category: "animali",
-    answers: ["Leoni", "Elefanti", "Giraffe", "Tigri", "Scimmie/Primati"],
-    source:
-      "Non esiste una classifica statistica ufficiale unica: elenco basato sul consenso comune tra le principali guide di zoo nel mondo",
   },
   {
     id: "top5-altitudine-media",
@@ -97,7 +89,7 @@ export const TOP5_BANK: Top5Def[] = [
     category: "scienze",
     answers: ["Ipercolesterolemia familiare", "Anemia falciforme", "Talassemia", "Fibrosi cistica", "Sindrome di Down"],
     source:
-      "Stime di prevalenza comunemente citate in letteratura medica/genetica (non esiste una classifica ufficiale unica)",
+      "Stime di prevalenza comunemente citate in letteratura medica/genetica ",
   },
   {
     id: "top5-primi-elementi",
@@ -141,15 +133,15 @@ export const TOP5_BANK: Top5Def[] = [
     category: "serietv",
     answers: ["I Simpson", "The Big Bang Theory", "Seinfeld", "Frasier", "Friends"],
     source:
-      "Stime aggregate di ricavi pubblicitari, syndication e streaming (Forbes, GOBankingRates, Collider); le reti non divulgano cifre ufficiali uniche, quindi l'ordine esatto tra le prime posizioni è indicativo",
+      "Stime aggregate di ricavi pubblicitari, syndication e streaming (Forbes, GOBankingRates, Collider);",
   },
   {
     id: "top5-serietv-lunghe",
     title: "Serie TV più lunghe di sempre (per numero di episodi)",
     category: "serietv",
-    answers: ["Guiding Light", "General Hospital", "Days of Our Lives", "As the World Turns", "The Young and the Restless"],
+    answers: ["Doctor Who -697", "I simpsons -662", "Gunsmoke -635", "Lassie -588", "Law and Order -456"],
     source:
-      "Guinness World Records / Wikipedia — soap opera americane per numero di episodi trasmessi (alcune sono ancora in onda, quindi il conteggio cresce nel tempo)",
+      "MoviePlayer.it",
   },
   {
     id: "top5-serietv-emmy",
@@ -179,7 +171,7 @@ export const TOP5_BANK: Top5Def[] = [
     category: "serietv",
     answers: ["The Mandalorian", "Hannah Montana", "High School Musical", "Wizards of Waverly Place", "Phineas and Ferb"],
     source:
-      "Stima basata su ricavi di merchandising/home video riportati da Disney e dalla stampa di settore (Hollywood Reporter, Billboard); non esiste una classifica ufficiale unica",
+      "Stima basata su ricavi di merchandising/home video riportati da Disney e dalla stampa di settore (Hollywood Reporter, Billboard)",
   },
   {
     id: "top5-film-incassi",
@@ -187,7 +179,7 @@ export const TOP5_BANK: Top5Def[] = [
     category: "film",
     answers: ["Avatar (2009)", "Avengers: Endgame (2019)", "Avatar: La via dell'acqua (2022)", "Titanic (1997)", "Ne Zha 2 (2025)"],
     source:
-      "Box Office Mojo / Wikipedia — incassi mondiali non aggiustati per l'inflazione, dati aggiornati a metà 2026 (Titanic e Ne Zha 2 sono sostanzialmente a pari merito)",
+      "Box Office Mojo / Wikipedia — incassi mondiali non aggiustati per l'inflazione, dati aggiornati a metà 2026 ",
   },
   {
     id: "top5-film-lunghi",
@@ -238,7 +230,7 @@ export const TOP5_BANK: Top5Def[] = [
     title: "Artisti con più ascoltatori mensili su Spotify",
     category: "musica",
     answers: ["Bruno Mars", "Justin Bieber", "The Weeknd", "Rihanna", "Michael Jackson"],
-    source: "kworb.net — Spotify Top Artists by Monthly Listeners, luglio 2026 (la classifica cambia di continuo)",
+    source: "kworb.net — Spotify Top Artists by Monthly Listeners, luglio 2026 ",
   },
   {
     id: "top5-sanremo-ultimi",
@@ -278,7 +270,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Unravel – TK from Ling tosite sigure (Tokyo Ghoul)",
     ],
     source:
-      "Aggregazione di dati Spotify riportati da Xeud.it e AnimeClick; non esiste una classifica ufficiale unica sempre aggiornata",
+      "Aggregazione di dati Spotify riportati da Xeud.it e AnimeClick;",
   },
   {
     id: "top5-canzoni-disney",
@@ -292,7 +284,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Life Is a Highway – Cars",
     ],
     source:
-      "Dati Spotify riportati da varie testate (Sky TG24, Velvet Gossip, HipLatina); \"We Don't Talk About Bruno\" ha superato \"Let It Go\" dopo l'uscita di Encanto nel 2021",
+      "Dati Spotify riportati da varie testate (Sky TG24, Velvet Gossip, HipLatina)",
   },
   {
     id: "top5-vg-goty",
@@ -352,7 +344,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Grand Theft Auto V – 265 milioni $",
     ],
     source:
-      "Stime aggregate di budget di sviluppo e marketing riportate da stampa specializzata (IGN, Game Rant, Wikipedia); alcune cifre (es. GTA VI) sono stime non ufficiali",
+      "Stime aggregate di budget di sviluppo e marketing riportate da stampa specializzata (IGN, Game Rant, Wikipedia);",
   },
   {
     id: "top5-vg-mappe",
@@ -379,7 +371,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Luka Modrić (2018)",
     ],
     source:
-      "France Football / UEFA — albo d'oro del Pallone d'Oro; esclusi i vincitori ripetuti (Messi anche nel 2021 e 2019) e l'edizione 2020, non assegnata per la pandemia",
+      "France Football / UEFA — albo d'oro del Pallone d'Oro; esclusi i vincitori ripetuti e l'edizione 2020, non assegnata per la pandemia",
   },
   {
     id: "top5-sport-mondiali-calcio",
@@ -390,10 +382,10 @@ export const TOP5_BANK: Top5Def[] = [
       "Germania – 4 titoli",
       "Italia – 4 titoli",
       "Argentina – 3 titoli",
-      "Francia – 2 titoli",
+      "Francia / uruguay – 2 titoli",
     ],
     source:
-      "FIFA — albo d'oro dei Campionati del Mondo di calcio, aggiornato al 2026; Germania e Italia a pari merito con 4 titoli, Francia a pari merito con l'Uruguay con 2 titoli",
+      "FIFA — albo d'oro dei Campionati del Mondo di calcio, aggiornato al 2026",
   },
   {
     id: "top5-sport-champions",
@@ -407,7 +399,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Barcellona – 5",
     ],
     source:
-      "UEFA — albo d'oro della Champions League, aggiornato dopo la finale 2025-2026 vinta dal Paris Saint-Germain; Bayern Monaco e Liverpool a pari merito con 6 titoli",
+      "UEFA — albo d'oro della Champions League, aggiornato dopo la finale 2025-2026",
   },
   {
     id: "top5-sport-titoli-nazionali",
@@ -431,10 +423,10 @@ export const TOP5_BANK: Top5Def[] = [
       "Larisa Latynina – 18 (ginnastica)",
       "Nikolaj Andrianov – 15 (ginnastica)",
       "Boris Shakhlin – 13 (ginnastica)",
-      "Edoardo Mangiarotti – 13 (scherma)",
+      "Edoardo Mangiarotti / Takashi Ono – 13 (scherma)",
     ],
     source:
-      "Wikipedia — List of multiple Olympic medalists; Boris Shakhlin è a pari merito con Edoardo Mangiarotti e con il ginnasta giapponese Takashi Ono, tutti a 13 medaglie",
+      "Wikipedia — List of multiple Olympic medalists",
   },
   {
     id: "top5-sport-mondiali-pallavolo",
@@ -448,7 +440,7 @@ export const TOP5_BANK: Top5Def[] = [
       "Cecoslovacchia – 2 titoli",
     ],
     source:
-      "FIVB / Wikipedia — albo d'oro del Campionato mondiale maschile di pallavolo, aggiornato dopo la vittoria dell'Italia nelle Filippine nel settembre 2025 (quinto titolo azzurro, secondo consecutivo); Brasile e Polonia a pari merito con 3 titoli",
+      "FIVB / Wikipedia — albo d'oro del Campionato mondiale maschile di pallavolo",
   },
 ];
 
