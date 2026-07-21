@@ -197,9 +197,9 @@ interface PendingSfidaGinoRound {
 // estrae una fra 2 categorie (Indovina la Capitale / Indovina la Bandiera),
 // poi si gioca AL MEGLIO DI 6 domande all'interno di quella stessa categoria
 // (stesso pattern di questionIndex/revealed di Particolare, ma con 6 item
-// invece di 2, vedi SFIDA_GINO_ROUND_COUNT). Premio fisso e binario: 2000
-// monete oppure 0, deciso dall'host solo alla fine, in base a quante ne ha
-// indovinate a voce.
+// invece di 2, vedi SFIDA_GINO_ROUND_COUNT). Premio a tre soglie fisse (0,
+// 150 o 2000 monete, vedi SFIDA_GINO_VALID_REWARDS), deciso dall'host solo
+// alla fine, in base a quante ne ha indovinate a voce.
 interface PendingSfidaGino {
   categoryId: SfidaGinoCategoryId;
   categoryName: string;
@@ -321,7 +321,10 @@ const TCT_INTRO_DELAY_MS = 2200;
 const OCHO_VALID_REWARDS = [0, 50, 100];
 const PARTICOLARE_VALID_REWARDS = [0, 50, 100];
 const BUZZ_REWARD = 100; // premio fisso: una sola domanda, un solo vincitore (o nessuno)
-const SFIDA_GINO_REWARD = 2000; // premio fisso e binario: 2000 o 0, deciso dall'host
+// Tre possibili premi, decisi dall'host in base a quante ne ha indovinate a
+// voce: 0 (nessuna/poche), 150 (un discreto risultato) o 2000 (il grande
+// jackpot). Niente vie di mezzo oltre a queste tre soglie.
+const SFIDA_GINO_VALID_REWARDS = [0, 150, 2000];
 const SFIDA_GINO_ROUND_COUNT = 6; // quante domande al round (al meglio di N)
 const FINAL_ROUND_BONUS_COINS = 1000; // bonus per il giro finale, quando tutti i mondi sono esauriti
 
@@ -2077,7 +2080,7 @@ export class GameSession {
 
     // Il mondo "rovine" (SFIDA GINO) ha una meccanica dedicata: gioca solo
     // il giocatore di turno, a voce, come in Grandioso Quiz Particolare, ma
-    // con premio fisso e binario (2000 o 0 monete).
+    // con premio a tre soglie fisse (0, 150 o 2000 monete).
     if (worldId === "rovine") {
       this.beginSfidaGino(player, io);
       return;
@@ -3293,15 +3296,15 @@ export class GameSession {
   }
 
   // Solo l'host decreta il premio finale per l'intero minigioco (al meglio
-  // di SFIDA_GINO_ROUND_COUNT): 2000 monete o 0, binario (nessuna via di
-  // mezzo, a differenza di Ocho/Particolare/Duck). Stessi moltiplicatori di
-  // stato degli altri minigiochi.
+  // di SFIDA_GINO_ROUND_COUNT): 0, 150 o 2000 monete (vedi
+  // SFIDA_GINO_VALID_REWARDS), tre soglie fisse senza vie di mezzo diverse
+  // da queste. Stessi moltiplicatori di stato degli altri minigiochi.
   resolveSfidaGino(hostId: string, coinsAwarded: number, io: IOServer) {
     const host = this.players.get(hostId);
     if (!host?.isHost) return;
     const target = [...this.players.values()].find((p) => p.pendingSfidaGino);
     if (!target?.pendingSfidaGino) return;
-    if (coinsAwarded !== 0 && coinsAwarded !== SFIDA_GINO_REWARD) return;
+    if (!SFIDA_GINO_VALID_REWARDS.includes(coinsAwarded)) return;
 
     target.pendingSfidaGino = null;
 

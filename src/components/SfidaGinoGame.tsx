@@ -11,8 +11,9 @@ interface Props {
 // SFIDA GINO: gioca solo il giocatore di turno, a voce, come in Grandioso
 // Quiz Particolare, ma al MEGLIO DI N domande (stessa categoria per tutte,
 // N = payload.totalQuestions, vedi SFIDA_GINO_ROUND_COUNT in GameSession) e
-// un premio finale fisso e binario (2000 monete o 0, deciso dall'host solo
-// alla fine, in base a quante ne ha indovinate).
+// un premio finale a tre soglie fisse (0, 150 o 2000 monete, vedi
+// SFIDA_GINO_VALID_REWARDS in GameSession), deciso dall'host solo alla
+// fine, in base a quante ne ha indovinate.
 export function SfidaGinoGame({ payload, isHost, isMine, playerName }: Props) {
   const isLastQuestion = payload.questionIndex >= payload.totalQuestions - 1;
 
@@ -73,14 +74,21 @@ export function SfidaGinoGame({ payload, isHost, isMine, playerName }: Props) {
           <div style={{ textAlign: "center" }}>
             <p style={{ color: "var(--cream)", marginBottom: "0.6rem" }}>
               Al meglio di {payload.totalQuestions}, quante ne ha indovinate{" "}
-              <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong>? Assegna 2000 monete oppure 0:
+              <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong>? Assegna 0, 150 o 2000
+              monete:
             </p>
-            <div style={{ display: "flex", gap: "0.8rem", justifyContent: "center" }}>
+            <div style={{ display: "flex", gap: "0.8rem", justifyContent: "center", flexWrap: "wrap" }}>
               <button
                 className="btn-outline"
                 onClick={() => socket.emit("sfidaGino:resolve", { coinsAwarded: 0 })}
               >
                 0 🪙
+              </button>
+              <button
+                className="btn-outline"
+                onClick={() => socket.emit("sfidaGino:resolve", { coinsAwarded: 150 })}
+              >
+                150 🪙
               </button>
               <button
                 className="btn"

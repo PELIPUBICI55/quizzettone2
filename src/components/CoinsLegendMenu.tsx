@@ -9,7 +9,7 @@ interface Props {
 // guadagnano le monete in ciascun mondo. Se le regole/importi di un
 // minigioco cambiano lato server (vedi le costanti in GameSession.ts:
 // BASE_REWARD, TOP5_REWARD, CARO_AMICO_REWARD, OCHO_VALID_REWARDS,
-// PARTICOLARE_VALID_REWARDS, BUZZ_REWARD, SFIDA_GINO_REWARD,
+// PARTICOLARE_VALID_REWARDS, BUZZ_REWARD, SFIDA_GINO_VALID_REWARDS,
 // SFIDA_GINO_ROUND_COUNT, TCT_ENTRY_FEE/TCT_QUESTION_COUNT, i premi della
 // griglia di ACCHIAPPA LA PAPERA in server/data/duck.ts), va aggiornato
 // anche questo testo a mano.
@@ -27,7 +27,7 @@ const WORLD_REWARD_INFO: Record<string, string> = {
   cieli:
     "Una sola domanda per tutta la sala: chi preme il buzzer e risponde correttamente per primo vince 100 monete. Tutti gli altri: 0.",
   rovine:
-    "Rispondi a voce al meglio di 6 domande della stessa categoria (capitali o bandiere). Premio fisso e binario deciso dall'host: 2000 monete oppure 0, nessuna via di mezzo.",
+    "Rispondi a voce al meglio di 6 domande della stessa categoria (capitali o bandiere). L'host assegna 0, 150 o 2000 monete in base a quante ne indovini: tre soglie fisse, nessuna via di mezzo.",
   officina:
     "Rispondi a una domanda su un'altra persona del gruppo. Vittoria: 80 monete. Sconfitta: 0.",
 };
