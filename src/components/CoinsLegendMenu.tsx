@@ -23,11 +23,11 @@ const WORLD_REWARD_INFO: Record<string, string> = {
   deserto:
     "Scopri le caselle di una griglia 3×3 evitando la bomba nascosta. 0, 50 o 100 monete in base a quante caselle sicure hai scoperto.",
   ghiacciaia:
-    "Quiz automatico: serve arrivare a 3 risposte corrette prima di sbagliarne 2. Se ti qualifichi, scegli una casella su una griglia di 9 premi nascosti (40, 40, 50, 50, 50, 50, 100, 100 o 500 monete). ",
+    "4 domande: serve arrivare a 3 risposte corrette prima di sbagliarne 2. Se ti qualifichi, scegli il premio tra 9 disponibili (40, 50, 100 o 500 monete). ",
   cieli:
     "Una sola domanda per tutta la sala: chi preme il buzzer e risponde correttamente per primo vince 100 monete.",
   rovine:
-    "Rispondi a voce al meglio di 6 domande della stessa categoria (capitali o bandiere). L'host assegna 0, 150 o 2000 monete in base a quante ne indovini: tre soglie fisse, nessuna via di mezzo.",
+    "Prova a sfidare Gino nel suo campo di battaglia, 3 domande a testa. 0, 150 o 2000 monete in base al risultato",
   officina:
     "Rispondi a una domanda su un'altra persona del gruppo. Vittoria: 80 monete.",
 };
