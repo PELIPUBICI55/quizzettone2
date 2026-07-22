@@ -22,62 +22,35 @@ function worldDescription(worldId: string | undefined): string {
   switch (worldId) {
     case "vulcano":
       return (
-        "Qui si gioca a Top 5: la ruota estrae una categoria e una classifica top 5 al suo " +
-        "interno. Il giocatore di turno deve indovinare a voce le 5 posizioni: l'host rivela " +
-        "ogni risposta corretta e segna gli errori, poi decreta se la prova è vinta o persa."
+        "Benvenuto"
       );
     case "officina":
       return (
-        "Qui si gioca a Caro amico ti scrivo: prima scegli quale persona della ruota sei tu " +
-        "stesso (così non ti capiterà mai in sorte), poi verrà estratta una persona diversa e " +
-        "una domanda personale a cui il giocatore di turno deve rispondere a voce indovinando " +
-        "cosa risponderebbe quella persona."
+        "Benvenuto"
       );
     case "deserto":
       return (
-        "Qui si gioca a Ocho alla bomba: la ruota estrae una categoria e un gioco al suo " +
-        "interno con 9 risposte possibili, una delle quali è la bomba. Il giocatore di turno " +
-        "seleziona le risposte una alla volta cercando di evitarla: se la trova, o resta solo " +
-        "lei da scegliere, il gioco si ferma e l'host assegna 0, 50 o 100 monete."
+        "Benvenuto"
       );
     case "ghiacciaia":
       return (
-        "Qui si gioca a Acchiappa la papera: la ruota estrae una categoria, poi il giocatore di " +
-        "turno risponde da solo, senza alcun aiuto dall'host, a un quiz di massimo 4 domande a " +
-        "risposta doppia. Deve azzeccarne 3 su 4 per accedere alla griglia dei 9 premi nascosti " +
-        "(500-100-100-50-50-50-50-40-40): sceglie una casella, si svelano subito tutti i premi, " +
-        "ma solo quello scelto viene assegnato in monete, in automatico."
+        "Benvenuto"
       );
     case "foresta":
       return (
-        "Qui si gioca a Grandioso Quiz Particolare: la ruota estrae una fra 5 categorie " +
-        "(Animali, Serie TV, Film, Musica, Videogiochi) e gioca solo il giocatore di turno, " +
-        "che risponde A VOCE a 2 domande. Animali/Videogiochi/Film mostrano un dettaglio " +
-        "ravvicinato da indovinare (poi la foto intera alla rivelazione); Musica/Serie TV fanno " +
-        "ascoltare un brano/sigla a tutti (ma solo l'host vede il video, per non spoilerare). " +
-        "L'host gestisce prossima domanda/svela risposta e infine assegna 0, 50 o 100 monete."
+        "Benvenuto"
       );
     case "cieli":
       return (
-        "Qui si gioca a Il Grandioso Buzz: la ruota estrae una fra le stesse 5 categorie di " +
-        "Grandioso Quiz Particolare (Animali, Serie TV, Film, Musica, Videogiochi, ma con " +
-        "domande sempre diverse), e stavolta gioca TUTTA la sala insieme. Chi pensa di sapere " +
-        "la risposta preme il buzzer per prenotarsi: un pannello laterale mostra l'ordine di " +
-        "chi ha buzzato, e l'host può resettarlo in qualsiasi momento. Una sola domanda, che " +
-        "vale fissa 100 monete: l'host svela la risposta e decide a chi assegnarle (anche a " +
-        "nessuno)."
+        "Benvenuto"
       );
     case "rovine":
       return (
-        "Qui si gioca a Sfida Gino: la ruota estrae una fra 2 categorie (Indovina la Capitale, " +
-        "Indovina la Bandiera) e gioca solo il giocatore di turno, che risponde A VOCE al meglio " +
-        "di 6 domande nella stessa categoria. L'host svela la risposta dopo ognuna e, alla fine, " +
-        "assegna il premio: 0, 150 o 2000 monete, tre soglie fisse senza vie di mezzo."
+        "Benvenuto"
       );
     default:
       return (
-        "Una ruota deciderà la prova da affrontare qui: rispondi correttamente entro il tempo " +
-        "limite per guadagnare monete da spendere alla Cittadella."
+        "Benvenuto"
       );
   }
 }
