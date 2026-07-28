@@ -77,6 +77,11 @@ interface PendingChoice {
     | "moveBackwardChosen";
   amount?: number;
   targets?: string[]; // bersagli già scelti, per le scelte a più passaggi
+  // true se la scelta viene da una figurina (qualsiasi, rapida o no): in
+  // quel caso risolverla non deve mai far avanzare l'ordine dei turni,
+  // anche se capita che sia il turno di chi l'ha usata (vedi bug: "alcune
+  // carte fanno skippare il proprio turno dopo l'utilizzo").
+  fromCardEffect?: boolean;
 }
 
 interface PendingShieldContext {
@@ -1139,10 +1144,16 @@ export class GameSession {
   // altrimenti fa avanzare il turno normalmente. Usato sia dopo un tiro di
   // dado normale sia dopo uno spostamento causato da un altro imprevisto,
   // così gli imprevisti possono incatenarsi.
-  private checkSurpriseTileOrAdvance(player: InternalPlayer, io: IOServer) {
+  //
+  // fromCardEffect: true quando lo spostamento viene da una figurina (una
+  // qualsiasi tra quelle che ti fanno avanzare): in quel caso, se non c'è
+  // nulla di speciale sulla casella d'arrivo, NON deve far avanzare l'ordine
+  // dei turni. Nessuna figurina, rapida o no, consuma o sostituisce il turno
+  // di chi la usa: resta libero di tirare comunque il dado dopo.
+  private checkSurpriseTileOrAdvance(player: InternalPlayer, io: IOServer, fromCardEffect = false) {
     const pos = player.boardPosition;
     if (pos.onNode || !pos.edgeId || pos.progress === undefined) {
-      this.maybeAdvanceTurn(player, io);
+      if (!fromCardEffect) this.maybeAdvanceTurn(player, io);
       return;
     }
     const edge = edgeById(pos.edgeId);
@@ -1158,7 +1169,7 @@ export class GameSession {
         effectLabel: card.effectLabel,
       });
       // il turno finisce solo quando chiuderà la schermata (closeSurprise)
-    } else {
+    } else if (!fromCardEffect) {
       this.maybeAdvanceTurn(player, io);
     }
   }
@@ -1209,9 +1220,18 @@ export class GameSession {
   }
 
   // Dispatcher condiviso per le figurine che ti fanno avanzare di N caselle
-  // (es. Il Focolare +1, I Pirati +2, TheMadMarco +3). Gestisce sia il caso
-  // "sei fermo su un nodo con un bivio" (chiede la direzione) sia "sei a
-  // metà ponte" (avanza direttamente, con eventuale imprevisto a catena).
+  // (Il Focolare +1, I Pirati +2, TheMadMarco +3). Gestisce sia il caso "sei
+  // fermo su un nodo con un bivio" (chiede la direzione) sia "sei a metà
+  // ponte" (avanza direttamente, con eventuale imprevisto a catena).
+  //
+  // Questa funzione è usata SOLO da figurine, mai dal movimento col dado
+  // normale: per questo passa sempre fromCardEffect=true più sotto, per
+  // tutte e tre (anche le due non "rapide"): nessuna figurina, rapida o no,
+  // deve mai far terminare il turno di chi la usa atterrando su una casella
+  // qualunque. Se invece l'atterraggio è su un imprevisto o su un nodo
+  // (mondo/Cittadella), quella specifica interazione parte comunque
+  // normalmente (e sarà quella, eventualmente, a chiudere il turno più
+  // avanti).
   private dispatchSelfAdvance(player: InternalPlayer, steps: number, io: IOServer) {
     const pos = player.boardPosition;
     if (pos.onNode) {
@@ -1221,7 +1241,7 @@ export class GameSession {
         return;
       }
       if (neighbors.length > 1) {
-        player.pendingChoice = { kind: "advanceThreeDirection", amount: steps };
+        player.pendingChoice = { kind: "advanceThreeDirection", amount: steps, fromCardEffect: true };
         this.emitChoiceOptions(player, io);
         this.broadcastState(io);
         return;
@@ -1232,11 +1252,12 @@ export class GameSession {
         neighbors[0].edgeId,
         neighbors[0].neighborId,
         steps,
-        io
+        io,
+        true
       );
     } else {
       const arrived = this.moveAlongCurrentEdge(player, steps, io);
-      if (!arrived) this.checkSurpriseTileOrAdvance(player, io);
+      if (!arrived) this.checkSurpriseTileOrAdvance(player, io, true);
     }
     this.broadcastState(io);
   }
@@ -1247,7 +1268,8 @@ export class GameSession {
     edgeId: string,
     neighborId: string,
     steps: number,
-    io: IOServer
+    io: IOServer,
+    fromCardEffect = false
   ) {
     const edge = edgeById(edgeId);
     if (!edge) {
@@ -1265,7 +1287,7 @@ export class GameSession {
         edgeId: edge.id,
         progress: newProgress,
       };
-      this.checkSurpriseTileOrAdvance(player, io);
+      this.checkSurpriseTileOrAdvance(player, io, fromCardEffect);
     }
   }
 
@@ -1665,25 +1687,24 @@ export class GameSession {
           chosen.edgeId,
           chosen.neighborId,
           choice.amount ?? 3,
-          io
+          io,
+          choice.fromCardEffect
         );
       }
       this.broadcastState(io);
       return;
     }
 
-    player.pendingChoice = null;
-
-    if (choice.kind === "stealCoins") {
-      const target = this.players.get(optionId);
-      if (target) this.stealWithShieldCheck(player, target, choice.amount ?? 0, io);
-    } else if (choice.kind === "swapPosition") {
-      const target = this.players.get(optionId);
-      if (target) this.swapWithShieldCheck(player, target, io);
-    } else if (choice.kind === "discardCard") {
-      const idx = player.collection.findIndex((c) => c.instanceId === optionId);
-      if (idx !== -1) player.collection.splice(idx, 1);
-    } else if (choice.kind === "moveBackwardChosen") {
+    // Nessuna scelta legata a una figurina (rapida o no) deve MAI far
+    // avanzare l'ordine dei turni: usare una figurina è sempre un'azione
+    // accessoria, non sostituisce né consuma il turno di chi la usa, che
+    // resta libero di tirare il dado normalmente subito dopo (vedi bug:
+    // "alcune carte fanno skippare il proprio turno dopo l'utilizzo").
+    // L'UNICA scelta gestita più sotto ("discardCard") non viene da una
+    // figurina ma da un imprevisto pescato durante lo spostamento col dado,
+    // quindi per quella terminare il turno resta corretto.
+    if (choice.kind === "moveBackwardChosen") {
+      player.pendingChoice = null;
       const target = this.players.get(optionId);
       if (target) {
         this.maybeShield(
@@ -1696,6 +1717,31 @@ export class GameSession {
           }
         );
       }
+      this.broadcastState(io);
+      return;
+    }
+
+    if (choice.kind === "stealCoins") {
+      player.pendingChoice = null;
+      const target = this.players.get(optionId);
+      if (target) this.stealWithShieldCheck(player, target, choice.amount ?? 0, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    if (choice.kind === "swapPosition") {
+      player.pendingChoice = null;
+      const target = this.players.get(optionId);
+      if (target) this.swapWithShieldCheck(player, target, io);
+      this.broadcastState(io);
+      return;
+    }
+
+    player.pendingChoice = null;
+
+    if (choice.kind === "discardCard") {
+      const idx = player.collection.findIndex((c) => c.instanceId === optionId);
+      if (idx !== -1) player.collection.splice(idx, 1);
     }
 
     this.maybeAdvanceTurn(player, io);
