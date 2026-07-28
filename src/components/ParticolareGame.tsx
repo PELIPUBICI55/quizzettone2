@@ -50,12 +50,22 @@ const YT_CONTAINER_ID = "particolare-yt-player";
 // spoilera la risposta guardando titolo/anteprima del video.
 export function ParticolareGame({ payload, isHost, isMine, playerName }: Props) {
   const playerRef = useRef<any>(null);
-  const [, forceRerender] = useState(0);
+  const [playerReady, setPlayerReady] = useState(false);
+  // I browser bloccano play()/audio avviati da codice se non c'è stato un
+  // vero click dell'utente SU QUESTA pagina prima: il comando "play" che
+  // arriva via socket dall'host non conta come tale per gli altri client, e
+  // veniva silenziosamente bloccato (solo l'host, che clicca lui stesso i
+  // controlli, sentiva l'audio). Ogni non-host deve quindi "sbloccare"
+  // l'audio con un click reale suo, una volta per ogni nuovo video: vedi il
+  // pulsante "Attiva audio" più sotto e primeAudio().
+  const [audioPrimed, setAudioPrimed] = useState(false);
 
   useEffect(() => {
     if (payload.media.kind !== "youtube") return;
     const videoId = payload.media.videoId;
     let cancelled = false;
+    setAudioPrimed(false);
+    setPlayerReady(false);
 
     loadYoutubeApi().then(() => {
       if (cancelled) return;
@@ -67,7 +77,7 @@ export function ParticolareGame({ payload, isHost, isMine, playerName }: Props) 
         videoId,
         playerVars: { autoplay: 0, controls: isHost ? 1 : 0 },
         events: {
-          onReady: () => forceRerender((n) => n + 1),
+          onReady: () => setPlayerReady(true),
         },
       });
     });
@@ -81,6 +91,19 @@ export function ParticolareGame({ payload, isHost, isMine, playerName }: Props) 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload.media.kind === "youtube" ? payload.media.videoId : null, isHost]);
+
+  // Va chiamata SOLO dentro un vero onClick: un breve play+pausa immediato
+  // basta a far registrare al browser "l'utente ha interagito con questo
+  // player", sbloccando i playVideo() successivi innescati da mediaControl
+  // (che arrivano via socket, non da un click, e da soli verrebbero bloccati).
+  const primeAudio = () => {
+    const player = playerRef.current;
+    if (player?.playVideo) {
+      player.playVideo();
+      setTimeout(() => player.pauseVideo?.(), 250);
+    }
+    setAudioPrimed(true);
+  };
 
   // Ogni client (host incluso) resta sincronizzato sulle azioni play/pausa/
   // riavvolgi decise dall'host, applicandole al proprio player locale.
@@ -156,6 +179,11 @@ export function ParticolareGame({ payload, isHost, isMine, playerName }: Props) 
                 : { width: 1, height: 1, overflow: "hidden", position: "absolute", left: -9999, top: -9999 }
             }
           />
+          {!isHost && !audioPrimed && (
+            <button className="btn" onClick={primeAudio} disabled={!playerReady} style={{ marginTop: "0.6rem" }}>
+              🔊 Attiva audio
+            </button>
+          )}
           {isHost && (
             <div style={{ display: "flex", gap: "0.6rem", justifyContent: "center", marginTop: "0.6rem" }}>
               <button className="btn-outline" onClick={() => sendControl("rewind")}>
