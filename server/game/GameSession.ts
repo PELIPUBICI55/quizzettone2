@@ -1334,6 +1334,13 @@ export class GameSession {
 
     const card = player.pendingSurprise;
     player.pendingSurprise = null;
+    // Avvisa TUTTI i client (non solo chi ha cliccato "chiudi") che questo
+    // imprevisto è chiuso: senza questo segnale i giocatori non di turno non
+    // hanno alcun modo di aggiornare la loro schermata, e restano bloccati
+    // sul primo imprevisto della catena finché non ne arriva uno nuovo (che
+    // riapre "board:surpriseDrawn" subito dopo, se l'effetto ne concatena un
+    // altro) - vedi bug: "visuale bloccata sul primo imprevisto".
+    io.emit("board:surpriseClosed", { playerId: player.id });
 
     this.maybeShield(
       player,

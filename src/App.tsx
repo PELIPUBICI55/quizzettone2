@@ -477,6 +477,12 @@ export default function App() {
       setSurpriseInfo(p);
       setChooseTargetInfo(null);
     };
+    // Vedi "board:surpriseClosed" in shared/types.ts: senza questo, i
+    // giocatori non di turno restavano bloccati sulla schermata del primo
+    // imprevisto quando l'effetto ne concatenava altri (o quando la catena
+    // finiva senza mostrare nient'altro). Se ne arriva subito un altro
+    // concatenato, onSurpriseDrawn lo ripopola un istante dopo.
+    const onSurpriseClosed = () => setSurpriseInfo(null);
     const onChooseTarget = (p: ChooseTargetPayload) => setChooseTargetInfo(p);
     const onShieldPrompt = (p: { message: string }) => setShieldPromptInfo(p);
     const onShieldUsed = () => setShieldPromptInfo(null);
@@ -541,6 +547,7 @@ export default function App() {
     socket.on("tct:skipped", onTctSkipped);
     socket.on("shop:packOpened", onPack);
     socket.on("board:surpriseDrawn", onSurpriseDrawn);
+    socket.on("board:surpriseClosed", onSurpriseClosed);
     socket.on("board:chooseTarget", onChooseTarget);
     socket.on("board:useShieldPrompt", onShieldPrompt);
     socket.on("board:shieldUsed", onShieldUsed);
@@ -595,6 +602,7 @@ export default function App() {
       socket.off("tct:skipped", onTctSkipped);
       socket.off("shop:packOpened", onPack);
       socket.off("board:surpriseDrawn", onSurpriseDrawn);
+      socket.off("board:surpriseClosed", onSurpriseClosed);
       socket.off("board:chooseTarget", onChooseTarget);
       socket.off("board:useShieldPrompt", onShieldPrompt);
       socket.off("board:shieldUsed", onShieldUsed);

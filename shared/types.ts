@@ -700,6 +700,13 @@ export interface ServerToClientEvents {
   }) => void;
   "board:diceRolled": (payload: { playerId: string; value: number }) => void;
   "board:surpriseDrawn": (payload: { playerId: string; text: string; effectLabel: string }) => void;
+  // Emesso non appena un imprevisto viene chiuso (vedi GameSession.closeSurprise),
+  // PRIMA di sapere se l'effetto ne concatenerà subito un altro: serve a far
+  // pulire lo stato locale a TUTTI i client (anche i non di turno, che non
+  // hanno un proprio pulsante "chiudi"), altrimenti resterebbero bloccati
+  // sulla schermata del primo imprevisto della catena. Se l'effetto ne
+  // concatena un altro, un nuovo "board:surpriseDrawn" arriva subito dopo.
+  "board:surpriseClosed": (payload: { playerId: string }) => void;
   "board:useShieldPrompt": (payload: { message: string }) => void;
   "board:shieldUsed": (payload: { playerId: string }) => void;
   "board:chooseTarget": (payload: ChooseTargetPayload) => void;
