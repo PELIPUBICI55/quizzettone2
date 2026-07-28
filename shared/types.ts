@@ -602,6 +602,16 @@ export interface ClientToServerEvents {
     payload: { code: string; name: string; clientId: string },
     cb: (res: JoinResult) => void
   ) => void;
+  // Ripristina una partita da un file di salvataggio scaricato in
+  // precedenza (vedi "game:save"): "data" è il contenuto del file, così
+  // com'è stato salvato dal client, non validato lato tipi (il server lo
+  // controlla a runtime). Stesso comportamento di party:join una volta
+  // ricreata la sessione: se questo browser era l'host originale (stesso
+  // clientId), si riaggancia da solo al suo posto.
+  "party:restore": (
+    payload: { data: unknown; name: string; clientId: string },
+    cb: (res: JoinResult) => void
+  ) => void;
   "party:start": () => void;
   "party:kick": (payload: { playerId: string }) => void;
   "party:setCoins": (payload: { playerId: string; amount: number }) => void;
@@ -617,11 +627,16 @@ export interface ClientToServerEvents {
     answerIndex: number | null;
   }) => void;
   "card:use": (payload: { cardId: string }) => void;
-  // Salva la partita su disco lato server così può essere ripresa più tardi
-  // ricollegandosi con lo stesso codice stanza (anche dopo un riavvio del
-  // server). Qualsiasi minigioco in corso per qualunque giocatore viene
-  // annullato: tutti si ritrovano sulla mappa pronti per il turno successivo.
-  "game:save": () => void;
+  // Salva la partita: lato server viene comunque scritta su disco come
+  // backup temporaneo (utile finché il processo resta vivo), ma dato che su
+  // molti host il disco non è persistente (es. Render free), la copia
+  // affidabile è quella che il client riceve nella callback e scarica come
+  // file locale (vedi SaveGameButton.tsx). Qualsiasi minigioco in corso per
+  // qualunque giocatore viene annullato: tutti si ritrovano sulla mappa
+  // pronti per il turno successivo.
+  "game:save": (
+    cb: (res: { ok: true; data: unknown } | { ok: false; error?: string }) => void
+  ) => void;
   "shop:buyPack": (payload: { packId: string }) => void;
   "shop:leave": () => void;
   "board:beginMinigame": () => void;

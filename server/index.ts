@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { Server } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.js";
 import { PartyManager } from "./game/PartyManager.js";
+import type { SerializedGameSession } from "./game/GameSession.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +37,29 @@ io.on("connection", (socket) => {
       cb({ ok: false, error: "Codice partita non trovato." });
       return;
     }
+    const player = session.addPlayer(socket.id, name, clientId);
+    socketLocation.set(socket.id, { code: session.code, playerId: player.id });
+    cb({ ok: true, code: session.code });
+    session.broadcastState(io);
+    session.resendPendingScreens(player.id, io);
+    session.resendPendingQuestion(player.id, io);
+  });
+
+  socket.on("party:restore", ({ data, name, clientId }, cb) => {
+    // controllo grossolano: il file arriva da un input <input type="file">
+    // scelto dall'utente, non fidiamoci ciecamente della sua forma. Una
+    // validazione più stretta campo per campo non vale lo sforzo qui: nel
+    // peggiore dei casi una sessione malformata darà errori più avanti nel
+    // normale flusso di gioco, non compromette altre partite.
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !Array.isArray((data as { players?: unknown }).players)
+    ) {
+      cb({ ok: false, error: "File di salvataggio non valido o corrotto." });
+      return;
+    }
+    const session = parties.restore(data as SerializedGameSession);
     const player = session.addPlayer(socket.id, name, clientId);
     socketLocation.set(socket.id, { code: session.code, playerId: player.id });
     cb({ ok: true, code: session.code });
@@ -367,11 +391,16 @@ io.on("connection", (socket) => {
     session?.leaveShop(loc.playerId, io);
   });
 
-  socket.on("game:save", () => {
+  socket.on("game:save", (cb) => {
     const loc = socketLocation.get(socket.id);
-    if (!loc) return;
+    if (!loc) {
+      cb({ ok: false, error: "Non sei in nessuna partita." });
+      return;
+    }
     const session = parties.get(loc.code);
-    session?.saveGame(loc.playerId, io);
+    const data = session?.saveGame(loc.playerId, io);
+    if (data) cb({ ok: true, data });
+    else cb({ ok: false, error: "Impossibile salvare la partita." });
   });
 
   socket.on("disconnect", () => {

@@ -10,10 +10,11 @@ interface Props {
 }
 
 const RARITY_ORDER: Record<CardRarity, number> = {
-  leggendaria: 0,
-  epica: 1,
-  rara: 2,
-  comune: 3,
+  segreta: 0,
+  leggendaria: 1,
+  epica: 2,
+  rara: 3,
+  comune: 4,
 };
 
 export function Board({ state }: Props) {

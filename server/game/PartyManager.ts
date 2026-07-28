@@ -43,4 +43,21 @@ export class PartyManager {
     const session = this.sessions.get(code);
     if (session && session.isEmpty) this.sessions.delete(code);
   }
+
+  // Ripristina una partita da un file di salvataggio caricato dal client
+  // (vedi "party:restore" in server/index.ts): il disco del server non è
+  // una fonte affidabile su molti host (es. Render free), quindi il file
+  // scaricato dall'host è la copia "di riferimento". Se il codice stanza
+  // salvato nel file risulta già occupato da un'altra partita in corso, ne
+  // assegniamo uno nuovo piuttosto che rischiare di mischiare due partite.
+  restore(data: SerializedGameSession): GameSession {
+    let code = (data.code || "").toUpperCase();
+    if (!code || this.sessions.has(code)) {
+      code = generateCode();
+      while (this.sessions.has(code)) code = generateCode();
+    }
+    const restored = GameSession.deserialize({ ...data, code });
+    this.sessions.set(code, restored);
+    return restored;
+  }
 }

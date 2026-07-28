@@ -4090,8 +4090,12 @@ export class GameSession {
   // perso. Scelta deliberata per tenere il salvataggio semplice e robusto,
   // invece di dover catturare fedelmente lo stato esatto di ogni possibile
   // minigioco a metà.
-  saveGame(playerId: string, io: IOServer) {
-    if (this.phase === "ended") return; // partita già conclusa: nulla da salvare
+  // Ritorna i dati serializzati (o null se non si è potuto salvare) così
+  // chi chiama può rimandarli al client host per il download locale: vedi
+  // il commento su "game:save" in shared/types.ts sul perché il file scritto
+  // su disco qui sotto è solo un backup best-effort, non la copia affidabile.
+  saveGame(playerId: string, io: IOServer): SerializedGameSession | null {
+    if (this.phase === "ended") return null; // partita già conclusa: nulla da salvare
 
     const triggeringPlayer = this.players.get(playerId);
     if (!triggeringPlayer?.isHost) {
@@ -4100,7 +4104,7 @@ export class GameSession {
           message: "Solo l'host può salvare la partita.",
         });
       }
-      return;
+      return null;
     }
 
     // eventi di sessione (coinvolgono più giocatori insieme, non un singolo
@@ -4145,18 +4149,20 @@ export class GameSession {
       if (current) current.pendingShop = true;
     }
 
-    writeSave(this.code, this.serialize());
+    const data = this.serialize();
+    writeSave(this.code, data);
 
     io.emit("error:message", {
       message: `💾 Partita salvata${
         triggeringPlayer ? ` da ${triggeringPlayer.name}` : ""
-      }! Per riprenderla in futuro basta ricollegarsi con il codice ${this.code}.`,
+      }! Conserva il file scaricato: ti servirà per riprenderla (oltre al codice ${this.code}).`,
     });
     this.broadcastState(io);
     // avvisa i client di ricaricare la pagina: qualsiasi schermata di
     // minigioco rimasta aperta localmente (stato React, non server) va
     // ripulita, così tutti ripartono puliti dalla mappa (vedi App.tsx)
     io.emit("game:saved");
+    return data;
   }
 
   serialize(): SerializedGameSession {
