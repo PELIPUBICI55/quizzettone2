@@ -9,11 +9,6 @@ interface Props {
   players: PlayerSummary[];
 }
 
-// Deve restare allineata alla soglia TCT_ENTRY_FEE lato server
-// (server/game/GameSession.ts): serve solo per decidere se mostrare qui il
-// tasto "Skippa gioco" prima ancora di tentare di avviare il minigioco.
-const TCT_ENTRY_FEE = 100;
-
 // Descrizione mostrata all'arrivo su ogni mondo, specifica per la sua
 // meccanica dedicata (se ne ha una). I mondi senza ancora una meccanica
 // propria (cieli, rovine) restano sul testo generico del quiz a risposta
@@ -54,23 +49,8 @@ function worldDescription(worldId: string | undefined): string {
       );
   }
 }
-export function WelcomeScreen({ world, isMine, playerName, turnPlayerId, players }: Props) {
+export function WelcomeScreen({ world, isMine, playerName }: Props) {
   const isTct = world?.id === "abisso";
-
-  // La condizione NON è "esistono almeno due giocatori qualsiasi con 100
-  // monete": è il giocatore di turno stesso che deve averne almeno 100, più
-  // almeno un altro giocatore connesso che gli faccia da sfidante. Deve
-  // restare allineata a beginTct() in server/game/GameSession.ts.
-  const turnPlayer = players.find((p) => p.id === turnPlayerId);
-  const turnPlayerQualifies = !!turnPlayer && turnPlayer.connected && turnPlayer.coins >= TCT_ENTRY_FEE;
-  const otherQualifyingCount = players.filter(
-    (p) => p.id !== turnPlayerId && p.connected && p.coins >= TCT_ENTRY_FEE
-  ).length;
-  const tctNotEnoughPlayers = isTct && (!turnPlayerQualifies || otherQualifyingCount < 1);
-
-  const skipGame = () => {
-    socket.emit("board:beginMinigame");
-  };
 
   return (
     <div className="wheel-wrap">
@@ -79,18 +59,14 @@ export function WelcomeScreen({ world, isMine, playerName, turnPlayerId, players
       </h1>
       <div className="wheel-text-panel">
         <p className="subtle">{world?.tagline ?? ""}</p>
-        {tctNotEnoughPlayers ? (
+        {isTct ? (
           <p>
-            Servono almeno due giocatori connessi con 100 monete per tuffarsi nell'abisso (tra cui
-            il giocatore di turno): al momento non ci sono abbastanza sfidanti, quindi questa prova
-            va saltata.
-          </p>
-        ) : isTct ? (
-          <p>
-            Qui si gioca a Il tuffo nell'abisso: tutti i giocatori connessi con almeno 100 monete
-            vengono automaticamente iscritti (la quota forma il montepremi) e si sfidano su 4
-            domande a tempo. Chi risponde correttamente più in fretta guadagna più punti: alla
-            fine il montepremi va a chi ne ha totalizzati di più.
+            Qui si gioca a Il tuffo nell'abisso: partecipano SEMPRE tutti i giocatori connessi, a
+            prescindere da quante monete hanno. Il montepremi si forma togliendo fino a 100 monete
+            a testa (chi ne ha meno versa solo quel che ha); se il totale raccolto non arriva
+            comunque a 100, il montepremi viene comunque portato a 100. Poi ci si sfida su 4 domande
+            a tempo: chi risponde correttamente più in fretta guadagna più punti, e alla fine il
+            montepremi va a chi ne ha totalizzati di più.
           </p>
         ) : (
           <p>{worldDescription(world?.id)}</p>
@@ -98,15 +74,9 @@ export function WelcomeScreen({ world, isMine, playerName, turnPlayerId, players
       </div>
 
       {isMine ? (
-        tctNotEnoughPlayers ? (
-          <button className="btn-outline" onClick={skipGame}>
-            Skippa gioco
-          </button>
-        ) : (
-          <button className="btn" onClick={() => socket.emit("board:beginMinigame")}>
-            Ok, iniziamo!
-          </button>
-        )
+        <button className="btn" onClick={() => socket.emit("board:beginMinigame")}>
+          Ok, iniziamo!
+        </button>
       ) : (
         <p style={{ color: "var(--cream)", fontSize: "1rem" }}>
           In attesa che <strong style={{ color: "var(--gold-soft)" }}>{playerName}</strong> sia

@@ -3398,36 +3398,19 @@ export class GameSession {
     this.broadcastState(io);
   }
 
-  // Avvia il round di TCT (mondo "abisso"): tutti i giocatori connessi con
-  // almeno 100 monete vengono iscritti automaticamente, pagano la quota
-  // (che forma il montepremi) e si pescano le domande. La condizione per
-  // giocare NON è "esistono almeno due giocatori qualsiasi qualificati": è
-  // il giocatore di turno stesso che deve avere almeno 100 monete, E deve
-  // esisterne almeno un altro (connesso, con almeno 100 monete) che gli
-  // faccia da sfidante. Altrimenti il tuffo nell'abisso salta e il turno
-  // prosegue normale.
+  // Avvia il round di TCT (mondo "abisso"): il minigioco parte SEMPRE,
+  // partecipano tutti i giocatori connessi (spettatori esclusi), a
+  // prescindere da quante monete hanno. Il montepremi si forma togliendo
+  // fino a TCT_ENTRY_FEE monete a testa (chi ne ha meno versa solo quel che
+  // ha, mai in negativo); se il totale raccolto non arriva comunque alla
+  // soglia, il montepremi viene comunque portato a TCT_ENTRY_FEE, senza
+  // restituire nulla a chi ha già versato.
   private beginTct(player: InternalPlayer, io: IOServer) {
     if (isTctWorldExhausted(TCT_QUESTION_COUNT, this.playedTctQuestionIds)) {
       // Non dovrebbe succedere (il movimento impedisce di atterrare su un
       // mondo già disattivato), ma per sicurezza controlliamo comunque PRIMA
-      // di scalare la quota d'ingresso a nessuno.
+      // di scalare le monete a chiunque.
       this.deactivateWorld("abisso", io);
-      player.pendingWorldId = null;
-      this.maybeAdvanceTurn(player, io);
-      this.broadcastState(io);
-      return;
-    }
-    const turnPlayerQualifies = player.coins >= TCT_ENTRY_FEE;
-    const otherQualifyingCount = [...this.players.values()].filter(
-      (p) => p.id !== player.id && p.connected && p.coins >= TCT_ENTRY_FEE
-    ).length;
-
-    if (!turnPlayerQualifies || otherQualifyingCount < 1) {
-      io.emit("tct:skipped", {
-        reason: !turnPlayerQualifies
-          ? "Il giocatore di turno non ha almeno 100 monete: il tuffo nell'abisso salta."
-          : "Serve almeno un altro giocatore con 100 monete: il tuffo nell'abisso salta.",
-      });
       player.pendingWorldId = null;
       this.maybeAdvanceTurn(player, io);
       this.broadcastState(io);
@@ -3435,11 +3418,16 @@ export class GameSession {
     }
 
     const participants = [...this.players.values()].filter(
-      (p) => p.connected && p.coins >= TCT_ENTRY_FEE
+      (p) => p.connected && !p.isSpectator
     );
 
-    for (const p of participants) p.coins -= TCT_ENTRY_FEE;
-    const potTotal = participants.length * TCT_ENTRY_FEE;
+    let potTotal = 0;
+    for (const p of participants) {
+      const contribution = Math.min(TCT_ENTRY_FEE, p.coins);
+      p.coins -= contribution;
+      potTotal += contribution;
+    }
+    if (potTotal < TCT_ENTRY_FEE) potTotal = TCT_ENTRY_FEE;
 
     const questions = pickRandomTctQuestions(TCT_QUESTION_COUNT, this.playedTctQuestionIds);
     for (const q of questions) this.playedTctQuestionIds.add(q.id);

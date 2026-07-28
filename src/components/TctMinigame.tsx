@@ -166,7 +166,8 @@ export function TctMinigame({
             </>
           ) : (
             <p style={{ color: "var(--text-muted)", textAlign: "center", marginTop: "1rem" }}>
-              Non hai abbastanza monete per partecipare a questo round: guardi da spettatore.
+              Questo giro dell'abisso era già iniziato quando ti sei unito alla partita: guardi da
+              spettatore.
             </p>
           )}
         </div>
@@ -187,7 +188,8 @@ export function TctMinigame({
             {started.participantIds.map((id) => nameOf(state, id)).join(", ")}
           </p>
           <p>
-            Quota d'ingresso: <strong>🪙 {started.entryFee}</strong> a testa — Montepremi:{" "}
+            Quota nominale: <strong>🪙 {started.entryFee}</strong> a testa (chi ne ha di meno versa
+            solo quel che ha) — Montepremi:{" "}
             <strong style={{ color: "var(--gold-soft)" }}>🪙 {started.potTotal}</strong>
           </p>
         </div>
